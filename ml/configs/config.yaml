@@ -1,0 +1,130 @@
+# ══════════════════════════════════════════════════════════════════
+# Flood Risk MLOps — Master Config (v3 baseline)
+# ══════════════════════════════════════════════════════════════════
+
+project:
+  name: "flood_risk_sri_lanka"
+  version: "v3"
+  target: "flood_risk_score"
+  id_col: "record_id"
+  seed: 42
+
+paths:
+  train: "../data/raw/train.csv"
+  test:  "../data/raw/test.csv"
+  processed_train: "../data/processed/train_clean.parquet"
+  processed_test:  "../data/processed/test_clean.parquet"
+  versioned_dir: "../data/versioned"
+  registry: "registry/"
+  submissions: "submissions/"
+  logs: "logs/"
+
+data:
+  drop_cols:
+    - "generation_date"
+    - "is_synthetic"
+  corrupted_row_filter: "is_synthetic"   # rows where this is NaN are corrupted
+  deduplicate_by: "record_id"
+  target_averaging: true                  # average duplicate record_id targets
+
+features:
+  reason_flags:
+    - "flood"
+    - "infrastructure"
+    - "road"
+  binary_cols:
+    water_presence_flag: "Likely"
+    flood_occurrence_current_event: "Yes"
+    is_good_to_live: "Yes"
+    urban_rural: "Urban"
+  missingness_flags:
+    - "distance_to_river_m"
+    - "drainage_index"
+    - "ndvi"
+    - "ndwi"
+    - "electricity"
+    - "infrastructure_score"
+    - "nearest_hospital_km"
+  interactions:
+    - ["extreme_weather_index", "terrain_roughness_index"]
+    - ["elevation_m", "distance_to_river_m_log1p"]
+    - ["rainfall_7d_mm", "drainage_index"]
+    - ["rainfall_7d_mm_log1p", "extreme_weather_index"]
+  date_col: "generation_date"
+
+encoding:
+  cv_folds: 10
+  target_encoder_smoothing_auto: true    # adaptive smoothing by cardinality
+
+cv:
+  n_folds: 10
+  strategy: "stratified"
+  n_bins: 10                             # bins for stratification
+  seed: 42
+
+models:
+  lgb:
+    enabled: true
+    objective: "huber"
+    alpha: 0.9
+    metric: "mae"
+    verbosity: -1
+    num_leaves: 511
+    learning_rate: 0.02
+    n_estimators: 4000
+    min_child_samples: 15
+    subsample: 0.8
+    colsample_bytree: 0.7
+    reg_alpha: 0.05
+    reg_lambda: 0.5
+    random_state: 42
+    n_jobs: -1
+    early_stopping_rounds: 100
+
+  xgb:
+    enabled: true
+    objective: "reg:pseudohubererror"
+    eval_metric: "mae"
+    max_depth: 7
+    learning_rate: 0.02
+    n_estimators: 4000
+    subsample: 0.8
+    colsample_bytree: 0.7
+    reg_alpha: 0.05
+    reg_lambda: 0.5
+    random_state: 42
+    tree_method: "hist"
+    n_jobs: -1
+    verbosity: 0
+    early_stopping_rounds: 100
+
+  catboost:
+    enabled: true
+    iterations: 4000
+    learning_rate: 0.02
+    depth: 8
+    l2_leaf_reg: 2
+    loss_function: "MAE"
+    eval_metric: "MAE"
+    random_seed: 42
+    verbose: 0
+    early_stopping_rounds: 100
+
+meta_learner:
+  type: "ridge"
+  alpha: 1.0
+
+postprocessing:
+  clip_min: 0.0
+  clip_max: 1.0
+  calibrate: false                       # set true to enable isotonic calibration
+
+thresholds:
+  promote_if_cv_mae_below: 0.999        # champion/challenger gate
+  warn_if_pred_std_below: 0.03          # alert if predictions collapse
+  warn_if_pred_std_above: 0.15
+
+baselines:
+  lb_score: 0.383130
+  oof_mae: null                          # fill after first run
+  oof_rmse: null
