@@ -216,3 +216,18 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# FloodLens generated data and artifacts
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+data/versioned/*
+!data/versioned/.gitkeep
+artifacts/**/*
+!artifacts/.gitkeep
+!artifacts/flood-risk-v3/
+!artifacts/flood-risk-v3/.gitkeep
+ml/logs/
+ml/registry/
+ml/submissions/
