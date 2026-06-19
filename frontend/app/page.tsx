@@ -7,9 +7,11 @@ import {
   AlertTriangle,
   BarChart3,
   BrainCircuit,
+  Building2,
   DatabaseZap,
   Filter,
   Gauge,
+  ListChecks,
   Layers3,
   Loader2,
   LocateFixed,
@@ -24,12 +26,18 @@ import {
 } from "lucide-react"
 
 import {
+  DistrictSummary,
+  EmergencyPriorityLocation,
   getDistricts,
+  getDistrictSummary,
+  getEmergencyPriority,
   getHealth,
+  getHighRiskLocations,
   getLocationRecord,
   getLocations,
   getModelInfo,
   getMonitoringSummary,
+  HighRiskLocation,
   LocationRow,
   ModelInfo,
   MonitoringSummary,
@@ -90,7 +98,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 
 type ApiState = "checking" | "online" | "offline"
-type ActiveView = "overview" | "explorer" | "prediction" | "monitoring"
+type ActiveView =
+  | "overview"
+  | "explorer"
+  | "districts"
+  | "priority"
+  | "prediction"
+  | "monitoring"
 
 type LocationFeatureProperties = {
   record_id: string
@@ -108,6 +122,8 @@ const navItems: Array<{
 }> = [
   { value: "overview", label: "Overview", icon: <Activity /> },
   { value: "explorer", label: "Risk Explorer", icon: <MapPinned /> },
+  { value: "districts", label: "District Command", icon: <Building2 /> },
+  { value: "priority", label: "Priority Queue", icon: <ListChecks /> },
   { value: "prediction", label: "Prediction", icon: <Play /> },
   { value: "monitoring", label: "Monitoring", icon: <BarChart3 /> },
 ]
@@ -119,6 +135,11 @@ export default function Home() {
   const [monitoring, setMonitoring] = useState<MonitoringSummary | null>(null)
   const [districts, setDistricts] = useState<string[]>([])
   const [locations, setLocations] = useState<LocationRow[]>([])
+  const [districtSummary, setDistrictSummary] = useState<DistrictSummary[]>([])
+  const [highRiskLocations, setHighRiskLocations] = useState<HighRiskLocation[]>([])
+  const [emergencyPriority, setEmergencyPriority] = useState<
+    EmergencyPriorityLocation[]
+  >([])
   const [district, setDistrict] = useState(ALL_DISTRICTS)
   const [search, setSearch] = useState("")
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null)
@@ -129,6 +150,7 @@ export default function Home() {
   >({})
   const [loadingDashboard, setLoadingDashboard] = useState(true)
   const [loadingLocations, setLoadingLocations] = useState(true)
+  const [loadingDecision, setLoadingDecision] = useState(true)
   const [predicting, setPredicting] = useState(false)
   const [predictingRecordId, setPredictingRecordId] = useState<string | null>(
     null
@@ -207,6 +229,37 @@ export default function Home() {
     }
   }, [district, search])
 
+  useEffect(() => {
+    let ignore = false
+
+    async function loadDecisionData() {
+      setLoadingDecision(true)
+      try {
+        const scopedDistrict = district === ALL_DISTRICTS ? undefined : district
+        const [summary, highRisk, priority] = await Promise.all([
+          getDistrictSummary(),
+          getHighRiskLocations({ district: scopedDistrict, limit: 25 }),
+          getEmergencyPriority({ district: scopedDistrict, limit: 25 }),
+        ])
+        if (ignore) return
+        setDistrictSummary(summary)
+        setHighRiskLocations(highRisk)
+        setEmergencyPriority(priority)
+      } catch (err: unknown) {
+        if (ignore) return
+        setError(err instanceof Error ? err.message : "Decision request failed")
+      } finally {
+        if (!ignore) setLoadingDecision(false)
+      }
+    }
+
+    void loadDecisionData()
+
+    return () => {
+      ignore = true
+    }
+  }, [district])
+
   const selectedLocation = useMemo(
     () => locations.find((row) => row.record_id === selectedRecordId) ?? null,
     [locations, selectedRecordId]
@@ -259,6 +312,13 @@ export default function Home() {
     } finally {
       setPredictingRecordId(null)
     }
+  }
+
+  function handleOpenLocation(recordId: string, nextDistrict?: string) {
+    if (nextDistrict) setDistrict(nextDistrict)
+    setSearch(recordId)
+    setSelectedRecordId(recordId)
+    setActiveView("explorer")
   }
 
   return (
@@ -374,6 +434,29 @@ export default function Home() {
                   onSearchChange={setSearch}
                   onSelectLocation={setSelectedRecordId}
                   onPredictLocation={handlePredictLocation}
+                />
+              </TabsContent>
+
+              <TabsContent value="districts">
+                <DistrictCommandPanel
+                  district={district}
+                  districts={districts}
+                  summaries={districtSummary}
+                  highRiskLocations={highRiskLocations}
+                  loading={loadingDecision}
+                  onDistrictChange={setDistrict}
+                  onOpenLocation={handleOpenLocation}
+                />
+              </TabsContent>
+
+              <TabsContent value="priority">
+                <PriorityQueuePanel
+                  district={district}
+                  districts={districts}
+                  priorityLocations={emergencyPriority}
+                  loading={loadingDecision}
+                  onDistrictChange={setDistrict}
+                  onOpenLocation={handleOpenLocation}
                 />
               </TabsContent>
 
@@ -1165,6 +1248,439 @@ function RiskTable({
         </ScrollArea>
       </CardContent>
     </Card>
+  )
+}
+
+function DistrictCommandPanel({
+  district,
+  districts,
+  summaries,
+  highRiskLocations,
+  loading,
+  onDistrictChange,
+  onOpenLocation,
+}: {
+  district: string
+  districts: string[]
+  summaries: DistrictSummary[]
+  highRiskLocations: HighRiskLocation[]
+  loading: boolean
+  onDistrictChange: (district: string) => void
+  onOpenLocation: (recordId: string, district?: string) => void
+}) {
+  const visibleSummaries =
+    district === ALL_DISTRICTS
+      ? summaries
+      : summaries.filter((summary) => summary.district === district)
+  const highestRiskDistrict = summaries[0]
+  const totalPlaces = visibleSummaries.reduce(
+    (total, summary) => total + summary.monitored_places,
+    0
+  )
+  const highRiskCount = visibleSummaries.reduce(
+    (total, summary) => total + summary.high_risk_count,
+    0
+  )
+  const priorityCount = visibleSummaries.reduce(
+    (total, summary) =>
+      total + summary.critical_priority_count + summary.elevated_priority_count,
+    0
+  )
+
+  return (
+    <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+      <div className="flex flex-col gap-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>District Command</CardTitle>
+            <CardDescription>
+              District-level flood risk comparison for planning and resource allocation.
+            </CardDescription>
+            <CardAction>
+              <DecisionDistrictFilter
+                district={district}
+                districts={districts}
+                onDistrictChange={onDistrictChange}
+              />
+            </CardAction>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <DecisionMetric
+                label="Highest-risk district"
+                value={highestRiskDistrict?.district ?? "-"}
+                detail={formatNullable(highestRiskDistrict?.average_baseline_risk_score)}
+                loading={loading}
+              />
+              <DecisionMetric
+                label="Monitored places"
+                value={totalPlaces.toLocaleString()}
+                detail="current scope"
+                loading={loading}
+              />
+              <DecisionMetric
+                label="High-risk places"
+                value={highRiskCount.toLocaleString()}
+                detail="baseline level"
+                loading={loading}
+              />
+              <DecisionMetric
+                label="Priority places"
+                value={priorityCount.toLocaleString()}
+                detail="critical + elevated"
+                loading={loading}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>District risk ranking</CardTitle>
+            <CardDescription>
+              Sorted by average baseline risk score.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ScrollArea className="h-[460px] rounded-lg border border-border">
+              <Table>
+                <TableHeader className="sticky top-0 z-10 bg-card">
+                  <TableRow>
+                    <TableHead>District</TableHead>
+                    <TableHead className="text-right">Places</TableHead>
+                    <TableHead className="text-right">Avg risk</TableHead>
+                    <TableHead className="text-right">High</TableHead>
+                    <TableHead className="text-right">Priority</TableHead>
+                    <TableHead>Drivers</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    Array.from({ length: 8 }).map((_, index) => (
+                      <TableRow key={index}>
+                        <TableCell colSpan={6}>
+                          <Skeleton className="h-7 w-full" />
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : visibleSummaries.length ? (
+                    visibleSummaries.map((summary) => (
+                      <TableRow
+                        key={summary.district}
+                        className="cursor-pointer"
+                        onClick={() => onDistrictChange(summary.district)}
+                      >
+                        <TableCell>{summary.district}</TableCell>
+                        <TableCell className="text-right font-mono text-xs">
+                          {summary.monitored_places.toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-xs">
+                          {summary.average_baseline_risk_score.toFixed(4)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-xs">
+                          {summary.high_risk_count}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-xs">
+                          {summary.critical_priority_count + summary.elevated_priority_count}
+                        </TableCell>
+                        <TableCell>
+                          <DriverChips
+                            drivers={summary.top_risk_drivers.map(
+                              (driver) => `${driver.driver} (${driver.count})`
+                            )}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                        No district summary available.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      </div>
+
+      <HighRiskLocationsPanel
+        locations={highRiskLocations}
+        loading={loading}
+        onOpenLocation={onOpenLocation}
+      />
+    </div>
+  )
+}
+
+function HighRiskLocationsPanel({
+  locations,
+  loading,
+  onOpenLocation,
+}: {
+  locations: HighRiskLocation[]
+  loading: boolean
+  onOpenLocation: (recordId: string, district?: string) => void
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>High-risk locations</CardTitle>
+        <CardDescription>
+          Ranked monitored places by baseline risk.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <ScrollArea className="h-[628px] rounded-lg border border-border">
+          <Table>
+            <TableHeader className="sticky top-0 z-10 bg-card">
+              <TableRow>
+                <TableHead>Place</TableHead>
+                <TableHead>Risk</TableHead>
+                <TableHead>Priority</TableHead>
+                <TableHead>Drivers</TableHead>
+                <TableHead className="text-right">Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                Array.from({ length: 8 }).map((_, index) => (
+                  <TableRow key={index}>
+                    <TableCell colSpan={5}>
+                      <Skeleton className="h-7 w-full" />
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : locations.length ? (
+                locations.map((location) => (
+                  <TableRow key={location.record_id}>
+                    <TableCell>
+                      <div className="font-medium">{location.place_name}</div>
+                      <div className="font-mono text-xs text-muted-foreground">
+                        {location.district} / {location.record_id}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col gap-1">
+                        <RiskBadge level={location.baseline_risk_level} />
+                        <span className="font-mono text-xs text-muted-foreground">
+                          {location.baseline_risk_score.toFixed(4)}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{location.operational_priority}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <DriverChips drivers={location.risk_drivers} />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => onOpenLocation(location.record_id, location.district)}
+                      >
+                        Open
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                    No high-risk locations for this scope.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </ScrollArea>
+      </CardContent>
+    </Card>
+  )
+}
+
+function PriorityQueuePanel({
+  district,
+  districts,
+  priorityLocations,
+  loading,
+  onDistrictChange,
+  onOpenLocation,
+}: {
+  district: string
+  districts: string[]
+  priorityLocations: EmergencyPriorityLocation[]
+  loading: boolean
+  onDistrictChange: (district: string) => void
+  onOpenLocation: (recordId: string, district?: string) => void
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Emergency Priority Queue</CardTitle>
+        <CardDescription>
+          Response-planning order based on risk, exposure, evacuation access, history, and infrastructure.
+        </CardDescription>
+        <CardAction>
+          <DecisionDistrictFilter
+            district={district}
+            districts={districts}
+            onDistrictChange={onDistrictChange}
+          />
+        </CardAction>
+      </CardHeader>
+      <CardContent>
+        <ScrollArea className="h-[680px] rounded-lg border border-border">
+          <Table>
+            <TableHeader className="sticky top-0 z-10 bg-card">
+              <TableRow>
+                <TableHead className="w-16">Rank</TableHead>
+                <TableHead>Place</TableHead>
+                <TableHead>Score</TableHead>
+                <TableHead>Risk</TableHead>
+                <TableHead>Priority</TableHead>
+                <TableHead>Reasons</TableHead>
+                <TableHead>Recommended action</TableHead>
+                <TableHead className="text-right">Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                Array.from({ length: 10 }).map((_, index) => (
+                  <TableRow key={index}>
+                    <TableCell colSpan={8}>
+                      <Skeleton className="h-7 w-full" />
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : priorityLocations.length ? (
+                priorityLocations.map((location) => (
+                  <TableRow key={location.record_id}>
+                    <TableCell className="font-mono text-xs">
+                      #{location.rank}
+                    </TableCell>
+                    <TableCell>
+                      <div className="font-medium">{location.place_name}</div>
+                      <div className="font-mono text-xs text-muted-foreground">
+                        {location.district} / {location.record_id}
+                      </div>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {location.emergency_priority_score.toFixed(4)}
+                    </TableCell>
+                    <TableCell>
+                      <RiskBadge level={location.baseline_risk_level} />
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{location.operational_priority}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <DriverChips drivers={location.priority_reasons} />
+                    </TableCell>
+                    <TableCell className="max-w-sm text-sm">
+                      {location.recommended_action}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => onOpenLocation(location.record_id, location.district)}
+                      >
+                        Open
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                    No priority locations for this scope.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </ScrollArea>
+      </CardContent>
+    </Card>
+  )
+}
+
+function DecisionDistrictFilter({
+  district,
+  districts,
+  onDistrictChange,
+}: {
+  district: string
+  districts: string[]
+  onDistrictChange: (district: string) => void
+}) {
+  return (
+    <Select
+      value={district}
+      onValueChange={(value) => {
+        if (value) onDistrictChange(value)
+      }}
+    >
+      <SelectTrigger className="w-56">
+        <SelectValue placeholder="All districts" />
+      </SelectTrigger>
+      <SelectContent align="end">
+        <SelectItem value={ALL_DISTRICTS}>All districts</SelectItem>
+        {districts.map((item) => (
+          <SelectItem key={item} value={item}>
+            {item}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+}
+
+function DecisionMetric({
+  label,
+  value,
+  detail,
+  loading,
+}: {
+  label: string
+  value: ReactNode
+  detail: string
+  loading: boolean
+}) {
+  return (
+    <div className="rounded-lg border border-border p-3">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      {loading ? (
+        <Skeleton className="mt-2 h-7 w-24" />
+      ) : (
+        <div className="mt-2 truncate text-2xl font-semibold tracking-tight">
+          {value}
+        </div>
+      )}
+      <div className="mt-1 text-xs text-muted-foreground">{detail}</div>
+    </div>
+  )
+}
+
+function DriverChips({ drivers }: { drivers: string[] }) {
+  if (!drivers.length) {
+    return <Badge variant="outline">No strong driver</Badge>
+  }
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {drivers.slice(0, 3).map((driver) => (
+        <Badge key={driver} variant="outline">
+          {driver}
+        </Badge>
+      ))}
+    </div>
   )
 }
 

@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 from app.core.settings import settings
 from app.main import app
+from app.services.location_service import MonitoredLocationProvider, get_location_service
 from app.services.prediction_log_service import PredictionLogService, get_prediction_log_service
 
 
@@ -186,3 +187,80 @@ def test_location_record_returns_404_for_unknown_record():
     response = client.get("/locations/not-a-record/record")
 
     assert response.status_code == 404
+
+
+def test_location_service_implements_provider_contract():
+    service = get_location_service()
+
+    assert isinstance(service, MonitoredLocationProvider)
+    assert service.districts()
+    assert service.locations(limit=1)
+
+
+def test_district_summary_returns_sorted_command_metrics():
+    response = client.get("/district-summary")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body
+    scores = [row["average_baseline_risk_score"] for row in body]
+    assert scores == sorted(scores, reverse=True)
+
+    first = body[0]
+    assert first["district"]
+    assert first["monitored_places"] > 0
+    assert 0 <= first["average_baseline_risk_score"] <= 1
+    assert first["high_risk_count"] >= 0
+    assert first["critical_priority_count"] >= 0
+    assert first["elevated_priority_count"] >= 0
+    assert isinstance(first["top_risk_drivers"], list)
+
+
+def test_high_risk_locations_are_sorted_and_filterable():
+    response = client.get("/high-risk-locations", params={"district": "Kilinochchi", "limit": 10})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body
+    assert len(body) <= 10
+    assert {row["district"] for row in body} == {"Kilinochchi"}
+    scores = [row["baseline_risk_score"] for row in body]
+    assert scores == sorted(scores, reverse=True)
+    assert {"record_id", "risk_drivers", "recommended_action"}.issubset(body[0])
+
+
+def test_high_risk_locations_bounds_limit_and_handles_unknown_district():
+    response = client.get("/high-risk-locations", params={"limit": 150})
+
+    assert response.status_code == 200
+    assert len(response.json()) == 100
+
+    response = client.get("/high-risk-locations", params={"district": "Unknown"})
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_emergency_priority_is_ranked_and_filterable():
+    response = client.get("/emergency-priority", params={"district": "Kilinochchi", "limit": 10})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body
+    assert len(body) <= 10
+    assert {row["district"] for row in body} == {"Kilinochchi"}
+    scores = [row["emergency_priority_score"] for row in body]
+    assert scores == sorted(scores, reverse=True)
+    assert [row["rank"] for row in body] == list(range(1, len(body) + 1))
+    assert isinstance(body[0]["priority_reasons"], list)
+    assert body[0]["recommended_action"]
+
+
+def test_emergency_priority_bounds_limit_and_handles_unknown_district():
+    response = client.get("/emergency-priority", params={"limit": 150})
+
+    assert response.status_code == 200
+    assert len(response.json()) == 100
+
+    response = client.get("/emergency-priority", params={"district": "Unknown"})
+    assert response.status_code == 200
+    assert response.json() == []

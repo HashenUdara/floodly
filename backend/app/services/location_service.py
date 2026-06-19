@@ -1,5 +1,6 @@
 """Business-facing monitored location data from the current seed provider."""
 
+from abc import ABC, abstractmethod
 from functools import lru_cache
 import hashlib
 import math
@@ -60,7 +61,26 @@ DISTRICT_CENTERS = {
 }
 
 
-class LocationService:
+class MonitoredLocationProvider(ABC):
+    @abstractmethod
+    def districts(self) -> list[str]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def locations(
+        self,
+        district: str | None = None,
+        search: str | None = None,
+        limit: int = 250,
+    ) -> list[dict[str, Any]]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def record(self, record_id: str) -> dict[str, Any]:
+        raise NotImplementedError
+
+
+class SeedCsvLocationProvider(MonitoredLocationProvider):
     def __init__(self, test_data_path: Path):
         self.test_data_path = test_data_path
 
@@ -264,6 +284,10 @@ def _as_float(value: Any) -> float | None:
 
 def _clamp(value: float) -> float:
     return max(0.0, min(1.0, value))
+
+
+class LocationService(SeedCsvLocationProvider):
+    """Compatibility wrapper for the active monitored-location provider."""
 
 
 @lru_cache(maxsize=1)

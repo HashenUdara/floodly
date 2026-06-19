@@ -1,26 +1,515 @@
 # FloodLens
 
-FloodLens is a flood risk intelligence foundation for the MLOps hackathon. The
-first milestone focuses on turning the existing competition model work into a
-clean repository with a reusable local inference artifact.
+FloodLens is a flood-risk intelligence and MLOps platform for Sri Lanka. It turns
+model predictions, environmental signals, monitored locations, and prediction
+logs into district-level decisions, emergency priorities, explanations, and
+action recommendations.
 
-## First Milestone
+The product goal is not to be a CSV map or a notebook demo. FloodLens is a
+production-shaped prototype of an operational flood-risk decision-support
+system.
 
-1. Put `train.csv` and `test.csv` in `data/raw/`.
-2. Install the ML environment:
-   ```bash
-   ./scripts/setup_ml.sh
-   ```
-3. Train and export the model bundle:
-   ```bash
-   cd ml
-   source .venv/bin/activate
-   python pipelines/train_pipeline.py --notes "flood-risk-v3 foundation"
-   ```
-4. Run one local prediction:
-   ```bash
-   ./scripts/run_local_prediction.sh
-   ```
+> Flood risk prediction, explanation, and response prioritization for Sri Lanka.
 
-The exported inference bundle is written to
-`artifacts/flood-risk-v3/model_bundle.joblib`.
+## Product Positioning
+
+FloodLens helps authorities, planners, insurers, logistics teams, and response
+coordinators answer four practical questions:
+
+- Which places are at higher flood risk?
+- Why are those places risky?
+- Which districts or assets should be prioritized first?
+- What action should be considered next?
+
+FloodLens is a decision-support system, not an official emergency alert system.
+It should not claim live disaster authority unless connected to verified
+real-time government, rainfall, river-gauge, or satellite data.
+
+## Current Implementation
+
+The repository already contains a working MLOps foundation:
+
+- ML training/export pipeline under `ml/`
+- saved inference artifact at `artifacts/flood-risk-v3/model_bundle.joblib`
+- FastAPI backend under `backend/`
+- Next.js + Tailwind + shadcn dashboard under `frontend/`
+- JSONL prediction logging under `backend/logs/predictions.jsonl`
+- model metadata and monitoring APIs
+- interactive Sri Lanka map using MapLibre/mapcn
+- monitored-place explorer with district filter, table, inspector, baseline
+  risk, risk drivers, priority, and recommended action
+
+Implemented backend APIs:
+
+- `GET /health`
+- `GET /model-info`
+- `POST /predict`
+- `GET /monitoring/summary`
+- `GET /districts`
+- `GET /locations`
+- `GET /locations/{record_id}/record`
+
+Current business layer:
+
+- treats the competition CSV as a seed provider, not the final product data
+  source
+- preserves raw coordinates while using corrected district presentation
+  coordinates for the map
+- computes baseline risk before model prediction
+- exposes risk drivers, operational priority, asset type, and recommended action
+- keeps model-assisted scoring available through `POST /predict`
+
+## Current Code Analysis
+
+The current backend has three useful service boundaries:
+
+- `PredictorService`: loads the saved ML bundle once and serves predictions.
+- `PredictionLogService`: appends successful predictions to JSONL and returns
+  monitoring summaries.
+- `LocationService`: reads seed data, converts rows into business-facing
+  monitored places, fixes map presentation coordinates, and computes baseline
+  decision signals.
+
+The frontend already has the correct product direction:
+
+- dark operational dashboard shell
+- sidebar navigation
+- metric cards
+- risk explorer
+- interactive map
+- operational risk queue
+- selected-place inspector
+- prediction tester
+- monitoring view
+
+The most important gap is that decision intelligence is still local to each
+location. The next step is to aggregate this intelligence across districts and
+prioritized queues so FloodLens feels like a real command platform instead of a
+single-location explorer.
+
+## Winning Readiness Against Judging Criteria
+
+FloodLens is already strong as a foundation, but the current implementation is
+not yet complete enough to maximize every judging category. The remaining work
+must convert the model-serving dashboard into a decision platform with
+aggregation, prioritization, feedback, drift monitoring, and a grounded Copilot.
+
+| Judging Area | Current Readiness | What Exists | Missing To Maximize Score |
+| --- | --- | --- | --- |
+| Scenario Understanding & Solution Design (20%) | Strong | Clear flood-risk decision-support product, monitored-place layer, recommended actions, limitations stated | District-level command view and final demo story tied to response planning |
+| Technical Implementation (30%) | Strong foundation | Feature engineering pipeline, ensemble model artifact, FastAPI serving, frontend dashboard, tests | Decision APIs, batch scoring, provider abstraction, richer evaluation/priority outputs |
+| MLOps & Production Readiness (25%) | Partial | model bundle, metadata, API serving, prediction logs, monitoring summary, tests | feedback loop, drift summary, CI/CD, Docker verification, retraining trigger story |
+| Innovation & Problem Solving (10%) | Partial | business risk drivers, corrected presentation coordinates, operational priority | grounded Copilot, district reports, emergency priority workflow |
+| Viva Evaluation (15%) | Good but needs polish | architecture rationale and README positioning | final architecture diagram, demo script, trade-off notes, known limitation answers |
+
+The highest-impact missing pieces are:
+
+1. **Decision Intelligence APIs**
+   - `GET /district-summary`
+   - `GET /high-risk-locations`
+   - `GET /emergency-priority`
+   - proves that FloodLens supports district planning and emergency
+     prioritization, not only one-location prediction.
+
+2. **Dashboard Decision Views**
+   - District Command view
+   - High-Risk Locations panel
+   - Emergency Priority Queue
+   - gives judges a clear, usable workflow with minimal explanation.
+
+3. **Batch Scoring**
+   - `POST /batch-predict`
+   - score many monitored places and store latest model-assisted score
+   - proves realistic workload handling and gives monitoring richer events.
+
+4. **Feedback + Drift Monitoring**
+   - `POST /feedback`
+   - `GET /monitoring/drift`
+   - capture observed outcomes, user confidence, drift status, and retraining
+     candidate state.
+
+5. **Grounded Flood Copilot**
+   - `POST /copilot`
+   - calls internal data tools instead of guessing
+   - answers district, location, priority, report, and monitoring questions.
+
+6. **Deployment and CI Evidence**
+   - GitHub Actions
+   - Docker Compose verification
+   - architecture diagram and final demo flow
+   - makes the project easy to defend in viva.
+
+## Ultimate UX Plan
+
+FloodLens should feel like an operational command center: dense, calm,
+trustworthy, and action-oriented. It should avoid marketing-page layouts,
+oversized explanatory copy, AI gimmicks, and decorative visuals that do not help
+decisions.
+
+Primary navigation:
+
+- Overview
+- Risk Explorer
+- District Command
+- Priority Queue
+- Monitoring
+- Copilot
+
+Top status strip:
+
+- API health
+- active model version
+- monitored places
+- predictions logged
+- latest prediction time
+
+Core dashboard surfaces:
+
+- **Overview**: model status, prediction volume, high-risk count, average risk,
+  latest activity.
+- **Risk Explorer**: map + table + district/search filters + selected-place
+  inspector.
+- **District Command**: district ranking, average risk, high-risk locations,
+  critical/elevated priority counts, dominant risk drivers.
+- **Priority Queue**: ranked locations for response planning, based on risk,
+  population density, evacuation distance, historical floods, and
+  infrastructure weakness.
+- **Location Inspector**: baseline score, model-assisted score, drivers,
+  recommended action, raw vs corrected coordinates, model version.
+- **Monitoring**: model version, prediction logs, risk distribution, top active
+  districts, feedback, drift/retraining signal.
+- **Copilot**: grounded assistant that answers from backend APIs, never from
+  unsupported guesses.
+
+UX rules:
+
+- Put actions near decisions: `Predict selected`, `Generate report`, `Mark
+  reviewed`, `Add feedback`.
+- Show score + reason + action together.
+- Use short labels instead of long explanatory paragraphs.
+- Use map and tables for scanning; use inspector for details.
+- Make the UI understandable without explaining the architecture on-screen.
+- Keep risk colors meaningful: green/amber/rose only for risk state.
+
+## Ultimate Technical Plan
+
+FloodLens should be built as a provider-backed MLOps application:
+
+```text
+Next.js Dashboard
+  -> FastAPI Backend
+    -> Decision Intelligence Services
+    -> Prediction Service
+    -> Monitoring + Feedback Services
+    -> Provider Layer
+      -> Seed CSV Provider
+      -> Future Database Provider
+      -> Future Uploaded Asset Provider
+      -> Future Weather/Hydrology Provider
+    -> ML Inference Bundle
+      -> artifacts/flood-risk-v3/model_bundle.joblib
+```
+
+Recommended backend services:
+
+- `PredictionService`: single and batch prediction using the saved ML bundle.
+- `MonitoredLocationProvider`: interface for assets/places independent of CSV.
+- `SeedCsvLocationProvider`: current provider backed by `data/raw/test.csv`.
+- `DecisionIntelligenceService`: district summary, high-risk ranking, emergency
+  priority, report inputs.
+- `MonitoringService`: prediction volume, model version, risk distribution,
+  model health, feedback counters.
+- `FeedbackService`: collect user feedback and observed outcomes.
+- `CopilotService`: grounded LLM orchestration that calls internal APIs/tools.
+
+Recommended API roadmap:
+
+- `GET /district-summary`
+- `GET /high-risk-locations`
+- `GET /emergency-priority`
+- `POST /batch-predict`
+- `POST /feedback`
+- `GET /monitoring/drift`
+- `POST /copilot`
+- `POST /reports/district`
+
+Data model direction:
+
+- `MonitoredAsset`
+  - `asset_id`
+  - `asset_type`
+  - `district`
+  - `place_name`
+  - `latitude`
+  - `longitude`
+  - `population_density`
+  - `rainfall_signals`
+  - `river_distance`
+  - `evacuation_distance`
+  - `infrastructure_score`
+  - `baseline_risk`
+  - `model_risk`
+  - `priority`
+  - `drivers`
+  - `recommended_action`
+
+MLOps direction:
+
+- saved model artifact with metadata
+- reproducible train/export pipeline
+- API-serving tests
+- frontend lint/build checks
+- prediction logs
+- feedback logs
+- drift checks
+- batch scoring
+- model card
+- CI/CD
+- Docker Compose
+
+## Winning Roadmap
+
+Build order matters. The next work should maximize visible business value while
+also improving architecture and MLOps depth.
+
+### Phase 1: Provider-Backed Decision Intelligence
+
+Build the highest-value next layer:
+
+- introduce a provider interface so backend logic no longer depends directly on
+  CSV internals
+- keep the current CSV implementation as `SeedCsvLocationProvider`
+- add `DecisionIntelligenceService`
+- add:
+  - `GET /district-summary`
+  - `GET /high-risk-locations`
+  - `GET /emergency-priority`
+- update frontend with:
+  - District Command view
+  - High-Risk Locations panel
+  - Emergency Priority Queue
+
+Why this matters:
+
+- visible business value for judges
+- better technical architecture
+- grounded data foundation for the Copilot
+- turns prediction into prioritization
+
+Acceptance criteria:
+
+- `/district-summary` returns district count, average baseline risk, high-risk
+  count, critical/elevated priority count, and top drivers.
+- `/high-risk-locations` returns a sorted list with score, level, priority,
+  drivers, and recommended action.
+- `/emergency-priority` ranks places by risk, population density, evacuation
+  distance, historical floods, and infrastructure weakness.
+- frontend shows District Command and Priority Queue without relying on long
+  explanatory text.
+- backend tests cover sorting, filtering, and empty/default behavior.
+
+### Phase 2: Batch Scoring
+
+Add model scoring at operational scale:
+
+- `POST /batch-predict`
+- score all filtered monitored places
+- persist latest model score per location in a lightweight store
+- show model score vs baseline score
+- update district and priority views from scored results
+
+Why this matters:
+
+- stronger MLOps story than one-row prediction
+- shows the system can support planning workflows
+- creates richer monitoring data
+
+Acceptance criteria:
+
+- `POST /batch-predict` accepts filters such as district and limit.
+- the API returns per-location model score, risk level, and model version.
+- batch predictions are logged with source `batch`.
+- frontend can run batch scoring for the current district.
+- monitoring summary includes single vs batch prediction counts.
+
+### Phase 3: Feedback and Monitoring Upgrade
+
+Add learning-loop evidence:
+
+- `POST /feedback`
+- capture useful/not useful prediction feedback
+- capture observed flood outcome when available
+- add monitoring cards for feedback volume, disagreement rate, and retraining
+  candidate status
+- add simple input drift checks against training/reference data
+
+Why this matters:
+
+- hits MLOps judging criteria directly
+- shows the model lifecycle, not just model serving
+- creates a clear retraining story
+
+Acceptance criteria:
+
+- `POST /feedback` records record ID, model version, user feedback, optional
+  observed outcome, and timestamp.
+- monitoring shows feedback count, disagreement count, and retraining candidate
+  status.
+- drift summary compares recent prediction input ranges/distributions against
+  reference training/test data.
+- failures return clear API errors and do not corrupt logs.
+
+### Phase 4: Grounded Flood Copilot
+
+Add Copilot only after the decision APIs exist.
+
+Supported questions:
+
+- Which districts are highest risk?
+- Why is this location risky?
+- Which places should emergency teams prioritize?
+- Compare Colombo and Kalutara.
+- Generate a district flood-risk report.
+- Summarize model monitoring status.
+
+Rules:
+
+- Copilot must call backend tools/APIs.
+- Copilot must not invent live rainfall, official warnings, or evacuation orders.
+- Copilot should say when data is seed/demo data.
+- Copilot should produce decision-support language, not emergency authority.
+
+Acceptance criteria:
+
+- Copilot supports predefined grounded intents first:
+  - explain location
+  - compare districts
+  - list priority locations
+  - generate district report
+  - summarize monitoring status
+- Copilot responses include source data from the backend.
+- unsupported questions receive safe limitation language.
+- Copilot does not call the model directly when existing decision APIs already
+  provide the required facts.
+
+### Phase 5: Deployment and CI/CD Polish
+
+Make the project reproducible:
+
+- Docker Compose for backend/frontend
+- GitHub Actions for:
+  - backend tests
+  - ML tests
+  - frontend lint
+  - frontend build
+- deployment notes for frontend and backend
+- architecture diagram
+- model card
+- demo script
+
+Why this matters:
+
+- proves engineering maturity
+- makes viva answers easy
+- demonstrates production readiness
+
+Acceptance criteria:
+
+- GitHub Actions runs backend tests, ML tests, frontend lint, and frontend build.
+- Docker Compose starts backend and frontend locally.
+- README demo commands are current.
+- architecture and demo docs match the implemented system.
+- final demo can be completed in under five minutes.
+
+## Recommended Demo Flow
+
+1. Open FloodLens dashboard.
+2. Show overview: model version, API health, logged predictions, monitored
+   places.
+3. Open Risk Explorer and filter one district.
+4. Select a monitored place.
+5. Show baseline risk, drivers, operational priority, and recommended action.
+6. Run model prediction for that place.
+7. Show the monitoring count update.
+8. Open District Command and show district-level risk comparison.
+9. Open Priority Queue and show the response-planning ranking.
+10. Ask Flood Copilot:
+    - "Why is this location risky?"
+    - "Which places should be prioritized first?"
+11. End on MLOps monitoring: logs, model version, feedback, drift/retraining
+    path.
+
+Best judging line:
+
+> We are not only predicting flood risk. We are operationalizing flood-risk ML
+> into a decision-support platform that ranks risk, explains drivers, monitors
+> predictions, and supports response planning.
+
+## Local Development
+
+Place `train.csv` and `test.csv` under `data/raw/`.
+
+Run ML tests:
+
+```bash
+cd ml
+.venv/bin/python -m pytest tests -q
+```
+
+Run backend tests:
+
+```bash
+PYTHONPATH=backend ml/.venv/bin/python -m pytest backend/tests -q
+```
+
+Start backend:
+
+```bash
+cd backend
+../ml/.venv/bin/uvicorn app.main:app --reload
+```
+
+Start frontend:
+
+```bash
+cd frontend
+pnpm dev
+```
+
+Frontend default backend URL:
+
+```text
+NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
+```
+
+Run frontend checks:
+
+```bash
+cd frontend
+pnpm lint
+pnpm build
+```
+
+Train/export model:
+
+```bash
+cd ml
+source .venv/bin/activate
+python pipelines/train_pipeline.py --notes "flood-risk-v3 foundation"
+```
+
+The exported inference bundle is written to:
+
+```text
+artifacts/flood-risk-v3/model_bundle.joblib
+```
+
+## Current Limitations
+
+- Current monitored-place data comes from the seed competition CSV.
+- Corrected map coordinates are district-level presentation coordinates, not
+  verified surveyed asset coordinates.
+- The product is not connected to live rainfall, river-gauge, satellite, or
+  official emergency feeds yet.
+- JSONL logging is used for speed; database-backed storage should come later.
+- FloodLens is decision support, not an official alerting system.
