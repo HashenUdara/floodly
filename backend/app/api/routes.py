@@ -6,6 +6,10 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, ConfigDict
 
 from app.core.settings import settings
+from app.services.decision_intelligence_service import (
+    DecisionIntelligenceService,
+    get_decision_intelligence_service,
+)
 from app.services.location_service import LocationService, get_location_service
 from app.services.prediction_log_service import PredictionLogService, get_prediction_log_service
 from app.services.predictor_service import PredictorService, get_predictor_service
@@ -70,3 +74,28 @@ def location_record(
     service: LocationService = Depends(get_location_service),
 ) -> dict[str, Any]:
     return service.record(record_id)
+
+
+@router.get("/district-summary")
+def district_summary(
+    service: DecisionIntelligenceService = Depends(get_decision_intelligence_service),
+) -> list[dict[str, Any]]:
+    return service.district_summary()
+
+
+@router.get("/high-risk-locations")
+def high_risk_locations(
+    district: str | None = None,
+    limit: int = 25,
+    service: DecisionIntelligenceService = Depends(get_decision_intelligence_service),
+) -> list[dict[str, Any]]:
+    return service.high_risk_locations(district=district, limit=limit)
+
+
+@router.get("/emergency-priority")
+def emergency_priority(
+    district: str | None = None,
+    limit: int = 25,
+    service: DecisionIntelligenceService = Depends(get_decision_intelligence_service),
+) -> list[dict[str, Any]]:
+    return service.emergency_priority(district=district, limit=limit)
