@@ -1,15 +1,8 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import type { ReactNode } from "react"
 import { useChat } from "@ai-sdk/react"
-import {
-  Bot,
-  BrainCircuit,
-  DatabaseZap,
-  FileText,
-  ShieldAlert,
-} from "lucide-react"
+import { Bot, BrainCircuit, FileText } from "lucide-react"
 import { DefaultChatTransport, isToolUIPart } from "ai"
 
 import type { FloodLensCopilotMessage } from "@/lib/copilot/agent"
@@ -46,7 +39,6 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -96,29 +88,26 @@ export function CopilotPanel({
   }
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[1fr_340px]">
-      <Card className="min-h-[720px]">
+    <div className="w-full">
+      <Card className="flex min-h-[calc(100vh-210px)] flex-col">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <BrainCircuit className="size-4 text-cyan-300" />
             Intelligent Copilot
           </CardTitle>
           <CardDescription>
-            GPT-powered operations assistant grounded in FloodLens model,
-            monitoring, feedback, drift, and priority data.
+            Ask about risk, priorities, monitored places, model operations, or
+            indexed response documents.
           </CardDescription>
-          <CardAction className="flex items-center gap-2">
+          <CardAction>
             <Button type="button" variant="outline" size="sm" onClick={onOpenKnowledge}>
               <FileText /> Upload knowledge
             </Button>
-            <Badge variant="outline" className="font-mono">
-              OpenAI / {process.env.NEXT_PUBLIC_OPENAI_MODEL_LABEL ?? "GPT"}
-            </Badge>
           </CardAction>
         </CardHeader>
-        <CardContent>
-          <div className="flex h-[610px] flex-col">
-            <Conversation className="rounded-lg border border-border bg-muted/10">
+        <CardContent className="flex flex-1 flex-col">
+          <div className="flex min-h-[620px] flex-1 flex-col">
+            <Conversation className="min-h-[460px] flex-1 rounded-lg border border-border bg-muted/10">
               <ConversationContent className="gap-5 p-4">
                 {messages.length === 0 ? (
                   <ConversationEmptyState
@@ -178,32 +167,6 @@ export function CopilotPanel({
               ) : null}
             </div>
           </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Grounding Contract</CardTitle>
-          <CardDescription>
-            What the Copilot is allowed to use and what it must refuse.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3 text-sm">
-          <InfoItem
-            icon={<DatabaseZap />}
-            title="Uses FloodLens tools"
-            detail="District summaries, priority queues, model scores, monitoring, feedback, and drift."
-          />
-          <InfoItem
-            icon={<FileText />}
-            title="Cited document evidence"
-            detail="Searches indexed SOPs, policies, and field reports through hybrid pgvector retrieval."
-          />
-          <InfoItem
-            icon={<ShieldAlert />}
-            title="Decision support only"
-            detail="No invented live weather, verified disaster status, official warnings, or evacuation orders."
-          />
         </CardContent>
       </Card>
     </div>
@@ -323,26 +286,6 @@ function CopilotMessage({
 
 function getToolName(part: { type: string; toolName?: string }) {
   return part.toolName ?? part.type.replace(/^tool-/, "")
-}
-
-function InfoItem({
-  icon,
-  title,
-  detail,
-}: {
-  icon: ReactNode
-  title: string
-  detail: string
-}) {
-  return (
-    <div className="rounded-lg border border-border p-3">
-      <div className="flex items-center gap-2 font-medium">
-        <span className="text-cyan-300 [&_svg]:size-4">{icon}</span>
-        {title}
-      </div>
-      <p className="mt-1 text-muted-foreground">{detail}</p>
-    </div>
-  )
 }
 
 function toolTitle(toolName: string) {
