@@ -128,7 +128,7 @@ export function RiskExplorer({
     : null
 
   return (
-    <div className="grid gap-4 2xl:grid-cols-[1fr_420px]">
+    <div className="w-full">
       <div className="space-y-4">
         <Card>
           <CardHeader className="gap-3">
