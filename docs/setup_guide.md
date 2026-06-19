@@ -190,11 +190,37 @@ cat > .env <<'EOF'
 OPENAI_API_KEY=replace-with-your-openai-api-key
 OPENAI_EMBEDDING_MODEL=text-embedding-3-small
 PUBLIC_API_BASE_URL=http://127.0.0.1:8000
+BACKEND_CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 EOF
 ```
 
-Terminal 1: start PostgreSQL/pgvector and FastAPI. Alembic migrations run
-automatically before Uvicorn starts.
+If you use Neon or a Dokploy-managed PostgreSQL/pgvector database instead of
+local Docker, add the quoted database URL to `backend/.env`:
+
+```bash
+cat > backend/.env <<'EOF'
+DATABASE_URL='postgresql://USER:PASSWORD@HOST:5432/DBNAME?sslmode=require'
+OPENAI_API_KEY=replace-with-your-openai-api-key
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+PUBLIC_API_BASE_URL=http://127.0.0.1:8000
+BACKEND_CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+EOF
+```
+
+Quote `DATABASE_URL` if it contains `&`, otherwise `source .env` can fail in
+zsh. Run migrations before starting the backend:
+
+```bash
+cd backend
+set -a
+source .env
+set +a
+../ml/.venv/bin/alembic upgrade head
+cd ..
+```
+
+Terminal 1 option A: start PostgreSQL/pgvector and FastAPI with Docker Compose.
+Alembic migrations run automatically before Uvicorn starts.
 
 ```bash
 docker compose -f infra/docker-compose.yml up --build db backend
@@ -210,7 +236,19 @@ Check backend:
 
 ```bash
 curl http://127.0.0.1:8000/health
+curl http://127.0.0.1:8000/readiness
 curl http://127.0.0.1:8000/model-info
+curl http://127.0.0.1:8000/monitoring/system
+```
+
+Terminal 1 option B: start FastAPI against Neon or Dokploy PostgreSQL:
+
+```bash
+cd backend
+set -a
+source .env
+set +a
+../ml/.venv/bin/uvicorn app.main:app --reload
 ```
 
 Terminal 2: start frontend.
@@ -259,6 +297,12 @@ Health:
 curl http://127.0.0.1:8000/health
 ```
 
+Readiness:
+
+```bash
+curl http://127.0.0.1:8000/readiness
+```
+
 Model info:
 
 ```bash
@@ -289,6 +333,21 @@ Monitoring summary:
 
 ```bash
 curl http://127.0.0.1:8000/monitoring/summary
+```
+
+System monitoring:
+
+```bash
+curl http://127.0.0.1:8000/monitoring/system
+```
+
+Load-smoke evidence:
+
+```bash
+ml/.venv/bin/python scripts/load_smoke.py \
+  --base-url http://127.0.0.1:8000 \
+  --requests 5 \
+  --output docs/load_smoke_latest.json
 ```
 
 Upload a document:

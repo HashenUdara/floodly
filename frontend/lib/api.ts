@@ -89,6 +89,24 @@ export type DriftSummary = {
   recommendation: string
 }
 
+export type SystemMonitoringSummary = {
+  total_requests: number
+  error_count: number
+  error_rate: number
+  p50_latency_ms: number | null
+  p95_latency_ms: number | null
+  routes: Array<{
+    route: string
+    count: number
+    error_count: number
+    p50_latency_ms: number | null
+    p95_latency_ms: number | null
+  }>
+  latest_error_at: string | null
+  document_indexing_failures: number
+  retrieval_events: number
+}
+
 export type PredictionResult = {
   record_id: string | null
   flood_risk_score: number
@@ -239,6 +257,10 @@ export function getMonitoringSummary() {
 
 export function getDriftSummary() {
   return request<DriftSummary>("/monitoring/drift")
+}
+
+export function getSystemMonitoringSummary() {
+  return request<SystemMonitoringSummary>("/monitoring/system")
 }
 
 export function getFeedbackSummary() {

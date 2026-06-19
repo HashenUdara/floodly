@@ -22,6 +22,7 @@ import {
   getModelInfo,
   getModelScores,
   getMonitoringSummary,
+  getSystemMonitoringSummary,
   HighRiskLocation,
   LatestModelScore,
   LocationRow,
@@ -31,6 +32,7 @@ import {
   predictFloodRisk,
   PredictionResult,
   submitFeedback,
+  SystemMonitoringSummary,
 } from "@/lib/api"
 import { sampleRecord } from "@/lib/sample-record"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -68,6 +70,8 @@ export default function Home() {
   const [feedbackSummary, setFeedbackSummary] =
     useState<FeedbackSummary | null>(null)
   const [driftSummary, setDriftSummary] = useState<DriftSummary | null>(null)
+  const [systemMonitoring, setSystemMonitoring] =
+    useState<SystemMonitoringSummary | null>(null)
   const [districts, setDistricts] = useState<string[]>([])
   const [locations, setLocations] = useState<LocationRow[]>([])
   const [districtSummary, setDistrictSummary] = useState<DistrictSummary[]>([])
@@ -101,14 +105,16 @@ export default function Home() {
   const [copilotDraft, setCopilotDraft] = useState<string | null>(null)
 
   async function refreshOperations() {
-    const [summary, feedback, drift] = await Promise.all([
+    const [summary, feedback, drift, system] = await Promise.all([
       getMonitoringSummary(),
       getFeedbackSummary(),
       getDriftSummary(),
+      getSystemMonitoringSummary(),
     ])
     setMonitoring(summary)
     setFeedbackSummary(feedback)
     setDriftSummary(drift)
+    setSystemMonitoring(system)
   }
 
   async function refreshModelScores(scopedDistrict?: string) {
@@ -123,13 +129,14 @@ export default function Home() {
 
     async function loadDashboard() {
       try {
-        const [health, model, summary, feedback, drift, districtList] =
+        const [health, model, summary, feedback, drift, system, districtList] =
           await Promise.all([
             getHealth(),
             getModelInfo(),
             getMonitoringSummary(),
             getFeedbackSummary(),
             getDriftSummary(),
+            getSystemMonitoringSummary(),
             getDistricts(),
           ])
         if (ignore) return
@@ -138,6 +145,7 @@ export default function Home() {
         setMonitoring(summary)
         setFeedbackSummary(feedback)
         setDriftSummary(drift)
+        setSystemMonitoring(system)
         setDistricts(districtList)
       } catch (err: unknown) {
         if (ignore) return
@@ -506,6 +514,7 @@ export default function Home() {
                   monitoring={monitoring}
                   feedbackSummary={feedbackSummary}
                   driftSummary={driftSummary}
+                  systemMonitoring={systemMonitoring}
                 />
               ) : null}
 

@@ -37,6 +37,15 @@ class Settings:
     prediction_log_path = backend_log_dir / "predictions.jsonl"
     latest_scores_path = backend_log_dir / "latest_scores.json"
     feedback_log_path = backend_log_dir / "feedback.jsonl"
+    http_event_log_path = backend_log_dir / "http_events.jsonl"
+    cors_origins = [
+        origin.strip()
+        for origin in os.getenv(
+            "BACKEND_CORS_ORIGINS",
+            "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001",
+        ).split(",")
+        if origin.strip()
+    ]
     database_url = normalize_database_url(os.getenv("DATABASE_URL"))
     openai_api_key = os.getenv("OPENAI_API_KEY")
     openai_embedding_model = os.getenv(

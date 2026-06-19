@@ -9,6 +9,10 @@ from app.services.feedback_service import FeedbackService, get_feedback_service
 from app.services.location_service import MonitoredLocationProvider, get_location_service
 from app.services.model_score_store import ModelScoreStore, get_model_score_store
 from app.services.prediction_log_service import PredictionLogService, get_prediction_log_service
+from app.services.system_monitoring_service import (
+    SystemMonitoringService,
+    get_system_monitoring_service,
+)
 
 
 client = TestClient(app)
@@ -57,6 +61,17 @@ def temp_phase3_services(tmp_path):
     app.dependency_overrides.clear()
 
 
+@pytest.fixture
+def temp_system_service(tmp_path):
+    service = SystemMonitoringService(tmp_path / "http_events.jsonl")
+    app.state.system_monitoring_service = service
+    app.dependency_overrides[get_system_monitoring_service] = lambda: service
+    yield service
+    app.dependency_overrides.clear()
+    if hasattr(app.state, "system_monitoring_service"):
+        delattr(app.state, "system_monitoring_service")
+
+
 def test_health_reports_model_loaded():
     response = client.get("/health")
 
@@ -65,6 +80,21 @@ def test_health_reports_model_loaded():
     assert body["status"] == "ok"
     assert body["service"] == "floodlens-api"
     assert body["model_loaded"] is True
+
+
+def test_readiness_reports_core_runtime_checks():
+    response = client.get("/readiness")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] in {"ready", "degraded"}
+    assert body["service"] == "floodlens-api"
+    assert body["checks"]["model_artifact"]["status"] == "ok"
+    assert body["checks"]["model_loaded"]["status"] == "ok"
+    assert body["checks"]["model_metadata"]["status"] == "ok"
+    assert body["checks"]["seed_test_data"]["status"] == "ok"
+    assert body["checks"]["upload_storage"]["status"] == "ok"
+    assert body["checks"]["database"]["status"] in {"ok", "skipped", "failed"}
 
 
 def test_model_info_returns_exported_metadata():
@@ -129,6 +159,46 @@ def test_monitoring_summary_returns_empty_defaults(temp_log_service):
         "model_versions": {},
         "top_districts_by_predictions": [],
     }
+
+
+def test_monitoring_system_returns_empty_defaults(temp_system_service):
+    response = client.get("/monitoring/system")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "total_requests": 0,
+        "error_count": 0,
+        "error_rate": 0,
+        "p50_latency_ms": None,
+        "p95_latency_ms": None,
+        "routes": [],
+        "latest_error_at": None,
+        "document_indexing_failures": 0,
+        "retrieval_events": 0,
+    }
+
+
+def test_monitoring_system_records_successful_and_failed_requests(temp_system_service):
+    response = client.get("/health")
+    assert response.status_code == 200
+
+    response = client.get("/not-a-route")
+    assert response.status_code == 404
+
+    response = client.get("/monitoring/system")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total_requests"] == 2
+    assert body["error_count"] == 1
+    assert body["error_rate"] == 0.5
+    assert body["p50_latency_ms"] is not None
+    assert body["p95_latency_ms"] is not None
+    assert body["latest_error_at"] is not None
+    routes = {item["route"]: item for item in body["routes"]}
+    assert "GET /health" in routes
+    assert "GET /not-a-route" in routes
+    assert routes["GET /not-a-route"]["error_count"] == 1
 
 
 def test_monitoring_summary_counts_logged_predictions(temp_log_service):

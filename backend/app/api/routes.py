@@ -4,9 +4,12 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import text
 
 from app.services.batch_scoring_service import BatchScoringService
 from app.core.settings import settings
+from app.db.database import get_engine
+from app.services.document_repository import DocumentRepository
 from app.services.decision_intelligence_service import (
     DecisionIntelligenceService,
     get_decision_intelligence_service,
@@ -20,6 +23,10 @@ from app.services.location_service import LocationService, get_location_service
 from app.services.model_score_store import ModelScoreStore, get_model_score_store
 from app.services.prediction_log_service import PredictionLogService, get_prediction_log_service
 from app.services.predictor_service import PredictorService, get_predictor_service
+from app.services.system_monitoring_service import (
+    SystemMonitoringService,
+    get_system_monitoring_service,
+)
 
 router = APIRouter()
 
@@ -55,6 +62,37 @@ def health(service: PredictorService = Depends(get_predictor_service)) -> dict[s
         "status": "ok",
         "service": settings.service_name,
         "model_loaded": service.model_loaded,
+    }
+
+
+@router.get("/readiness")
+def readiness(service: PredictorService = Depends(get_predictor_service)) -> dict[str, Any]:
+    checks = {
+        "model_artifact": {
+            "status": "ok" if settings.model_bundle_path.exists() else "failed",
+            "path": str(settings.model_bundle_path),
+        },
+        "model_loaded": {
+            "status": "ok" if service.model_loaded else "failed",
+        },
+        "model_metadata": {
+            "status": "ok" if settings.model_metadata_path.exists() else "failed",
+            "path": str(settings.model_metadata_path),
+        },
+        "seed_test_data": {
+            "status": "ok" if settings.test_data_path.exists() else "failed",
+            "path": str(settings.test_data_path),
+        },
+        "upload_storage": upload_storage_check(),
+        "database": database_readiness_check(),
+    }
+    ready = all(
+        check["status"] in {"ok", "skipped"} for check in checks.values()
+    )
+    return {
+        "status": "ready" if ready else "degraded",
+        "service": settings.service_name,
+        "checks": checks,
     }
 
 
@@ -105,6 +143,13 @@ def monitoring_drift(
     service: DriftMonitoringService = Depends(get_drift_monitoring_service),
 ) -> dict[str, Any]:
     return service.summary()
+
+
+@router.get("/monitoring/system")
+def monitoring_system(
+    service: SystemMonitoringService = Depends(get_system_monitoring_service),
+) -> dict[str, Any]:
+    return service.summary(document_indexing_failures=document_indexing_failures())
 
 
 @router.post("/feedback")
@@ -184,3 +229,51 @@ def emergency_priority(
     service: DecisionIntelligenceService = Depends(get_decision_intelligence_service),
 ) -> list[dict[str, Any]]:
     return service.emergency_priority(district=district, limit=limit)
+
+
+def upload_storage_check() -> dict[str, Any]:
+    try:
+        settings.document_upload_dir.mkdir(parents=True, exist_ok=True)
+        probe = settings.document_upload_dir / ".readiness_check"
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink(missing_ok=True)
+        return {"status": "ok", "path": str(settings.document_upload_dir)}
+    except OSError as error:
+        return {
+            "status": "failed",
+            "path": str(settings.document_upload_dir),
+            "message": str(error),
+        }
+
+
+def database_readiness_check() -> dict[str, Any]:
+    if not settings.database_url:
+        return {
+            "status": "skipped",
+            "message": "DATABASE_URL is not configured; Knowledge Library is disabled.",
+        }
+    engine = get_engine()
+    if engine is None:
+        return {"status": "failed", "message": "Database engine was not created."}
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("select 1"))
+            revision = connection.execute(text("select version_num from alembic_version")).scalar()
+        return {"status": "ok", "alembic_version": revision}
+    except Exception as error:  # pragma: no cover - database driver-specific detail
+        return {"status": "failed", "message": str(error)}
+
+
+def document_indexing_failures() -> int:
+    if not settings.database_url:
+        return 0
+    engine = get_engine()
+    if engine is None:
+        return 0
+    try:
+        from sqlalchemy.orm import Session
+
+        with Session(engine) as session:
+            return int(DocumentRepository(session).summary()["failed"])
+    except Exception:
+        return 0

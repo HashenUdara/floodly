@@ -20,6 +20,7 @@ import {
   MonitoringSummary,
   ObservedOutcome,
   PredictionResult,
+  SystemMonitoringSummary,
 } from "@/lib/api"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -302,13 +303,98 @@ export function MonitoringPanel({
   monitoring,
   feedbackSummary,
   driftSummary,
+  systemMonitoring,
 }: {
   monitoring: MonitoringSummary | null
   feedbackSummary: FeedbackSummary | null
   driftSummary: DriftSummary | null
+  systemMonitoring: SystemMonitoringSummary | null
 }) {
   return (
     <div className="grid gap-4 xl:grid-cols-[0.8fr_1.2fr]">
+      <Card className="xl:col-span-2">
+        <CardHeader>
+          <CardTitle>System reliability</CardTitle>
+          <CardDescription>
+            API request volume, latency, failures, and retrieval activity.
+          </CardDescription>
+          <CardAction>
+            <Badge variant="outline">
+              p95 {formatLatency(systemMonitoring?.p95_latency_ms)}
+            </Badge>
+          </CardAction>
+        </CardHeader>
+        <CardContent className="grid gap-4 xl:grid-cols-[0.8fr_1.2fr]">
+          {systemMonitoring ? (
+            <>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <InfoRow
+                  label="HTTP requests"
+                  value={systemMonitoring.total_requests.toLocaleString()}
+                />
+                <InfoRow
+                  label="Error rate"
+                  value={`${(systemMonitoring.error_rate * 100).toFixed(2)}%`}
+                />
+                <InfoRow
+                  label="p50 latency"
+                  value={formatLatency(systemMonitoring.p50_latency_ms)}
+                />
+                <InfoRow
+                  label="p95 latency"
+                  value={formatLatency(systemMonitoring.p95_latency_ms)}
+                />
+                <InfoRow
+                  label="Index failures"
+                  value={systemMonitoring.document_indexing_failures.toLocaleString()}
+                />
+                <InfoRow
+                  label="Retrieval calls"
+                  value={systemMonitoring.retrieval_events.toLocaleString()}
+                />
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Route</TableHead>
+                    <TableHead className="text-right">Count</TableHead>
+                    <TableHead className="text-right">Errors</TableHead>
+                    <TableHead className="text-right">p95</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {systemMonitoring.routes.slice(0, 5).map((item) => (
+                    <TableRow key={item.route}>
+                      <TableCell className="font-mono text-xs">
+                        {item.route}
+                      </TableCell>
+                      <TableCell className="text-right font-mono">
+                        {item.count}
+                      </TableCell>
+                      <TableCell className="text-right font-mono">
+                        {item.error_count}
+                      </TableCell>
+                      <TableCell className="text-right font-mono">
+                        {formatLatency(item.p95_latency_ms)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {systemMonitoring.routes.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-muted-foreground">
+                        No service telemetry logged yet.
+                      </TableCell>
+                    </TableRow>
+                  ) : null}
+                </TableBody>
+              </Table>
+            </>
+          ) : (
+            <EmptyLine />
+          )}
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle>Model Operations</CardTitle>
@@ -557,4 +643,8 @@ export function MonitoringPanel({
 
 function formatStatus(value: DriftSummary["status"] | undefined) {
   return value ? value.replaceAll("_", " ") : "-"
+}
+
+function formatLatency(value: number | null | undefined) {
+  return value == null ? "-" : `${value.toFixed(1)} ms`
 }

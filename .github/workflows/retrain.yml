@@ -1,0 +1,77 @@
+name: Manual Retraining
+
+on:
+  workflow_dispatch:
+    inputs:
+      notes:
+        description: "Run notes for the challenger artifact"
+        required: true
+        default: "manual retraining candidate"
+      artifact_url:
+        description: "Optional URL to floodlens-artifacts.zip. If empty, latest GitHub Release is used."
+        required: false
+        default: ""
+      mae_tolerance:
+        description: "Allowed challenger MAE regression against champion"
+        required: true
+        default: "0.002"
+      rmse_tolerance:
+        description: "Allowed challenger RMSE regression against champion"
+        required: true
+        default: "0.003"
+
+jobs:
+  retrain:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Download training artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_URL: ${{ inputs.artifact_url }}
+        run: |
+          if [ -n "$ARTIFACT_URL" ]; then
+            curl --fail --location "$ARTIFACT_URL" --output /tmp/floodlens-artifacts.zip
+          else
+            gh release download --pattern floodlens-artifacts.zip --dir /tmp
+          fi
+          unzip /tmp/floodlens-artifacts.zip -d .
+      - name: Install ML dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r ml/requirements.txt
+          python -m pip install -r backend/requirements.txt
+      - name: Validate input dataset
+        run: |
+          test -f data/raw/train.csv
+          test -f data/raw/test.csv
+          test -f artifacts/flood-risk-v3/metadata.json
+      - name: Train challenger
+        run: |
+          python ml/pipelines/train_pipeline.py \
+            --notes "${{ inputs.notes }}" \
+            --artifact-dir ../artifacts/challenger
+      - name: Evaluate promotion gates
+        env:
+          MAE_TOLERANCE: ${{ inputs.mae_tolerance }}
+          RMSE_TOLERANCE: ${{ inputs.rmse_tolerance }}
+        run: |
+          python scripts/validate_challenger.py \
+            --champion-metadata artifacts/flood-risk-v3/metadata.json \
+            --challenger-metadata artifacts/challenger/metadata.json \
+            --mae-tolerance "$MAE_TOLERANCE" \
+            --rmse-tolerance "$RMSE_TOLERANCE" \
+            --report challenger_report.json
+      - name: Upload challenger report
+        uses: actions/upload-artifact@v4
+        with:
+          name: challenger-report
+          path: challenger_report.json
+      - name: Upload challenger artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: floodlens-challenger-artifact
+          path: artifacts/challenger/

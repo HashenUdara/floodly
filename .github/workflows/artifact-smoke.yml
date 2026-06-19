@@ -1,0 +1,47 @@
+name: Artifact Smoke
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+jobs:
+  artifact-smoke:
+    runs-on: ubuntu-latest
+    env:
+      OPENAI_API_KEY: test-key
+      OPENAI_EMBEDDING_MODEL: text-embedding-3-small
+      PUBLIC_API_BASE_URL: http://127.0.0.1:8000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Download release artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download --pattern floodlens-artifacts.zip --dir /tmp
+          unzip /tmp/floodlens-artifacts.zip -d .
+      - name: Validate required files
+        run: |
+          test -f data/raw/train.csv
+          test -f data/raw/test.csv
+          test -f artifacts/flood-risk-v3/model_bundle.joblib
+          test -f artifacts/flood-risk-v3/metadata.json
+      - name: Install runtime dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r ml/requirements.txt
+          python -m pip install -r backend/requirements.txt
+      - name: Start backend
+        run: |
+          PYTHONPATH=backend python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 &
+          sleep 10
+      - name: Smoke health and model info
+        run: |
+          curl --fail http://127.0.0.1:8000/health
+          curl --fail http://127.0.0.1:8000/model-info
+      - name: Smoke single prediction
+        run: |
+          python scripts/load_smoke.py --base-url http://127.0.0.1:8000 --requests 1 --skip-documents-search

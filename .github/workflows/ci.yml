@@ -3,6 +3,7 @@ name: CI
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 jobs:
   ml-tests:
@@ -19,3 +20,80 @@ jobs:
       - name: Run ML tests
         working-directory: ml
         run: python -m pytest tests -q
+
+  backend-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: floodlens
+          POSTGRES_PASSWORD: floodlens
+          POSTGRES_DB: floodlens_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://floodlens:floodlens@localhost:5432/floodlens_test
+      OPENAI_API_KEY: test-key
+      OPENAI_EMBEDDING_MODEL: text-embedding-3-small
+      PUBLIC_API_BASE_URL: http://127.0.0.1:8000
+      BACKEND_CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Download release artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download --pattern floodlens-artifacts.zip --dir /tmp
+          unzip /tmp/floodlens-artifacts.zip -d .
+      - name: Validate required artifacts
+        run: |
+          test -f data/raw/train.csv
+          test -f data/raw/test.csv
+          test -f artifacts/flood-risk-v3/model_bundle.joblib
+          test -f artifacts/flood-risk-v3/metadata.json
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r ml/requirements.txt
+          python -m pip install -r backend/requirements.txt
+      - name: Run Alembic migrations
+        working-directory: backend
+        run: python -m alembic upgrade head
+      - name: Run backend tests
+        run: PYTHONPATH=backend python -m pytest backend/tests -q
+
+  frontend-checks:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_API_BASE_URL: http://127.0.0.1:8000
+      OPENAI_API_KEY: test-key
+      OPENAI_MODEL: gpt-5.5
+      NEXT_PUBLIC_OPENAI_MODEL_LABEL: floodlens-copilot
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+      - name: Lint frontend
+        working-directory: frontend
+        run: pnpm lint
+      - name: Build frontend
+        working-directory: frontend
+        run: pnpm build

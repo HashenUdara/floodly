@@ -121,6 +121,8 @@ The current backend has useful service boundaries:
   reference distribution and produces retraining signals.
 - document services: validate, store, extract, chunk, embed, index, retrieve,
   reindex, and delete operational knowledge sources.
+- `SystemMonitoringService`: records route-level HTTP telemetry and exposes
+  service reliability metrics for production-readiness evidence.
 
 The frontend has been split into focused dashboard components:
 
@@ -140,6 +142,8 @@ The frontend has been split into focused dashboard components:
 - Knowledge Library with upload progress, filters, indexing status, reindex,
   delete, and document access
 - cited document evidence in the Intelligent Copilot
+- Model Operations system reliability cards for request volume, error rate,
+  latency, indexing failures, and retrieval activity
 - component modules under `frontend/components/dashboard/`
 
 The most important remaining product gap is production hardening: deployed RAG

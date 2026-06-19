@@ -80,31 +80,31 @@ Target: maximize MLOps and Production Readiness.
 
 ### Continuous Integration
 
-- [ ] Run ML tests in GitHub Actions.
-- [ ] Run backend tests in GitHub Actions.
-- [ ] Run frontend lint in GitHub Actions.
-- [ ] Run TypeScript validation in GitHub Actions.
-- [ ] Run the frontend production build in GitHub Actions.
-- [ ] Validate Alembic migrations in GitHub Actions.
-- [ ] Validate artifact metadata and inference compatibility in GitHub Actions.
+- [x] Run ML tests in GitHub Actions.
+- [x] Run backend tests in GitHub Actions.
+- [x] Run frontend lint in GitHub Actions.
+- [x] Run TypeScript validation through the frontend production build in GitHub Actions.
+- [x] Run the frontend production build in GitHub Actions.
+- [x] Validate Alembic migrations in GitHub Actions.
+- [x] Validate artifact metadata and inference compatibility through the artifact smoke workflow.
 - [ ] Show a fully green workflow on the final commit.
 
 ### Observability
 
-- [ ] Record total HTTP request count.
-- [ ] Record HTTP error count and error rate.
-- [ ] Record single-prediction latency.
-- [ ] Record batch-prediction latency.
-- [ ] Record document indexing failures.
-- [ ] Record retrieval latency and result count.
-- [ ] Calculate p50 and p95 latency.
-- [ ] Include model version in prediction telemetry.
-- [ ] Expose the evidence through `GET /monitoring/system`.
-- [ ] Add dashboard presentation for the highest-value service metrics.
+- [x] Record total HTTP request count.
+- [x] Record HTTP error count and error rate.
+- [x] Record single-prediction latency through route-level API telemetry.
+- [x] Record batch-prediction latency through route-level API telemetry.
+- [x] Record document indexing failures.
+- [x] Record retrieval activity count and route latency.
+- [x] Calculate p50 and p95 latency.
+- [x] Include model version in HTTP telemetry when metadata is available.
+- [x] Expose the evidence through `GET /monitoring/system`.
+- [x] Add dashboard presentation for the highest-value service metrics.
 
 ### Retraining Workflow
 
-- [ ] Add a manually triggered GitHub Actions retraining workflow.
+- [x] Add a manually triggered GitHub Actions retraining workflow.
 - [ ] Validate the input dataset before training.
 - [ ] Train a challenger artifact.
 - [ ] Compare the challenger against the champion.
@@ -115,21 +115,22 @@ Target: maximize MLOps and Production Readiness.
 
 ### Scalability Evidence
 
-- [ ] Load-test `GET /health`.
-- [ ] Load-test `POST /predict`.
-- [ ] Load-test `POST /batch-predict`.
-- [ ] Load-test `POST /documents/search`.
+- [x] Add load-smoke tooling for `GET /health`.
+- [x] Add load-smoke tooling for `POST /predict`.
+- [x] Add load-smoke tooling for `POST /batch-predict`.
+- [x] Add load-smoke tooling for `POST /documents/search`.
+- [ ] Run load-smoke against the final deployed backend.
 - [ ] Record throughput, p50, p95, and failure rate.
 - [ ] Explain the current 100-record batch limit.
 - [ ] Document the queued-worker architecture required for larger workloads.
 
 ### Deployment Hardening
 
-- [ ] Make CORS environment-driven for the production frontend domain.
+- [x] Make CORS environment-driven for the production frontend domain.
 - [ ] Ensure deployment includes the required seed-provider data.
 - [ ] Verify Neon migration from a clean database.
 - [ ] Verify persistent uploaded-document storage.
-- [ ] Add backend readiness checks.
+- [x] Add backend readiness checks.
 - [ ] Publish the frontend production URL.
 - [ ] Publish the backend API URL.
 - [ ] Verify restart recovery for indexed documents and interrupted ingestion.
