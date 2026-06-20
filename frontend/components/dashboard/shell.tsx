@@ -44,7 +44,7 @@ export const COMMAND_NAV_ITEMS: NavItem[] = [
   { value: "priority-list", label: "Priority List", icon: <ListChecks /> },
   { value: "scenario", label: "Scenario Lab", icon: <SlidersHorizontal /> },
   { value: "reports", label: "Action Reports", icon: <FileText /> },
-  { value: "response-documents", label: "Response Documents", icon: <FolderOpen /> },
+  { value: "response-documents", label: "Guidance Library", icon: <FolderOpen /> },
   { value: "copilot", label: "Copilot", icon: <Bot /> },
 ]
 

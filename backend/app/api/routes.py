@@ -21,6 +21,7 @@ from app.services.drift_monitoring_service import (
 )
 from app.services.feedback_service import FeedbackService, get_feedback_service
 from app.services.location_service import LocationService, get_location_service
+from app.services.live_context_service import LiveContextService, get_live_context_service
 from app.services.model_score_store import ModelScoreStore, get_model_score_store
 from app.services.prediction_log_service import PredictionLogService, get_prediction_log_service
 from app.services.predictor_service import PredictorService, get_predictor_service
@@ -229,6 +230,38 @@ def monitoring_system(
     service: SystemMonitoringService = Depends(get_system_monitoring_service),
 ) -> dict[str, Any]:
     return service.summary(document_indexing_failures=document_indexing_failures())
+
+
+@router.get("/live-context/summary")
+def live_context_summary(
+    service: LiveContextService = Depends(get_live_context_service),
+) -> dict[str, Any]:
+    return service.summary()
+
+
+@router.get("/live-context/districts")
+def live_context_districts(
+    district: str | None = None,
+    service: LiveContextService = Depends(get_live_context_service),
+) -> dict[str, Any]:
+    return service.districts(district=district)
+
+
+@router.get("/live-context/locations/{record_id}")
+def live_context_location(
+    record_id: str,
+    service: LiveContextService = Depends(get_live_context_service),
+) -> dict[str, Any]:
+    return service.location(record_id)
+
+
+@router.post("/live-context/refresh")
+def live_context_refresh(
+    district: str | None = None,
+    limit: int | None = None,
+    service: LiveContextService = Depends(get_live_context_service),
+) -> dict[str, Any]:
+    return service.refresh(district=district, limit=limit)
 
 
 @router.post("/feedback")

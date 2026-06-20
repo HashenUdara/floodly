@@ -38,6 +38,7 @@ class Settings:
     latest_scores_path = backend_log_dir / "latest_scores.json"
     feedback_log_path = backend_log_dir / "feedback.jsonl"
     http_event_log_path = backend_log_dir / "http_events.jsonl"
+    live_context_cache_path = backend_log_dir / "live_context_cache.json"
     cors_origins = [
         origin.strip()
         for origin in os.getenv(
@@ -64,6 +65,9 @@ class Settings:
         "SCENARIO_EXTERNAL_ENRICHMENT", "false"
     ).lower() in {"1", "true", "yes"}
     scenario_context_timeout_s = float(os.getenv("SCENARIO_CONTEXT_TIMEOUT_S", "3"))
+    live_context_cache_ttl_s = int(os.getenv("LIVE_CONTEXT_CACHE_TTL_S", "1800"))
+    live_context_timeout_s = float(os.getenv("LIVE_CONTEXT_TIMEOUT_S", "4"))
+    live_context_refresh_limit = int(os.getenv("LIVE_CONTEXT_REFRESH_LIMIT", "25"))
 
 
 settings = Settings()

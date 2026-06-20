@@ -19,12 +19,18 @@ import {
   getHighRiskLocations,
   getLocationRecord,
   getLocations,
+  getLiveContextSummary,
+  getLiveDistrictContext,
+  getLiveLocationContext,
   getModelInfo,
   getModelScores,
   getMonitoringSummary,
   getSystemMonitoringSummary,
   HighRiskLocation,
   LatestModelScore,
+  LiveContextSummary,
+  LiveDistrictContext,
+  LocationLiveContext,
   LocationRow,
   ModelInfo,
   MonitoringSummary,
@@ -80,6 +86,10 @@ export default function Home() {
   const [driftSummary, setDriftSummary] = useState<DriftSummary | null>(null)
   const [systemMonitoring, setSystemMonitoring] =
     useState<SystemMonitoringSummary | null>(null)
+  const [liveSummary, setLiveSummary] = useState<LiveContextSummary | null>(null)
+  const [liveDistricts, setLiveDistricts] = useState<LiveDistrictContext[]>([])
+  const [selectedLiveContext, setSelectedLiveContext] =
+    useState<LocationLiveContext | null>(null)
   const [districts, setDistricts] = useState<string[]>([])
   const [locations, setLocations] = useState<LocationRow[]>([])
   const [districtSummary, setDistrictSummary] = useState<DistrictSummary[]>([])
@@ -101,6 +111,7 @@ export default function Home() {
   const [loadingDashboard, setLoadingDashboard] = useState(true)
   const [loadingLocations, setLoadingLocations] = useState(true)
   const [loadingDecision, setLoadingDecision] = useState(true)
+  const [loadingLiveContext, setLoadingLiveContext] = useState(true)
   const [predicting, setPredicting] = useState(false)
   const [predictingRecordId, setPredictingRecordId] = useState<string | null>(
     null
@@ -110,6 +121,7 @@ export default function Home() {
   const [feedbackSubmittingRecordId, setFeedbackSubmittingRecordId] =
     useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [liveContextError, setLiveContextError] = useState<string | null>(null)
   const [copilotDraft, setCopilotDraft] = useState<string | null>(null)
 
   async function refreshOperations() {
@@ -170,6 +182,62 @@ export default function Home() {
       ignore = true
     }
   }, [])
+
+  useEffect(() => {
+    let ignore = false
+
+    async function loadLiveContext() {
+      setLoadingLiveContext(true)
+      try {
+        const [summary, districtsResponse] = await Promise.all([
+          getLiveContextSummary(),
+          getLiveDistrictContext(),
+        ])
+        if (ignore) return
+        setLiveSummary(summary)
+        setLiveDistricts(districtsResponse.districts)
+        setLiveContextError(null)
+      } catch (err: unknown) {
+        if (ignore) return
+        setLiveSummary(null)
+        setLiveDistricts([])
+        setLiveContextError(
+          err instanceof Error ? err.message : "Live context is unavailable"
+        )
+      } finally {
+        if (!ignore) setLoadingLiveContext(false)
+      }
+    }
+
+    void loadLiveContext()
+
+    return () => {
+      ignore = true
+    }
+  }, [])
+
+  useEffect(() => {
+    let ignore = false
+
+    async function loadSelectedLiveContext() {
+      if (!selectedRecordId) {
+        setSelectedLiveContext(null)
+        return
+      }
+      try {
+        const context = await getLiveLocationContext(selectedRecordId)
+        if (!ignore) setSelectedLiveContext(context)
+      } catch {
+        if (!ignore) setSelectedLiveContext(null)
+      }
+    }
+
+    void loadSelectedLiveContext()
+
+    return () => {
+      ignore = true
+    }
+  }, [selectedRecordId])
 
   useEffect(() => {
     let ignore = false
@@ -261,6 +329,15 @@ export default function Home() {
       (monitoring?.medium_risk_count ?? 0) +
       (monitoring?.high_risk_count ?? 0),
     [monitoring]
+  )
+
+  const totalMonitoredPlaces = useMemo(
+    () =>
+      districtSummary.reduce(
+        (total, summary) => total + summary.monitored_places,
+        0
+      ),
+    [districtSummary]
   )
 
   async function handleJsonPredict(event: FormEvent<HTMLFormElement>) {
@@ -444,18 +521,9 @@ export default function Home() {
                 </p>
               </div>
               <div className="grid grid-cols-2 gap-2 text-sm sm:flex">
-                <StatusPill label="Monitored places" value={locations.length.toString()} />
+                <StatusPill label="Visible places" value={locations.length.toString()} />
                 {appMode === "command" ? (
-                  <StatusPill
-                    label="Need review"
-                    value={`${districtSummary.reduce(
-                      (total, summary) =>
-                        total +
-                        summary.critical_priority_count +
-                        summary.elevated_priority_count,
-                      0
-                    )}`}
-                  />
+                  <StatusPill label="National scope" value={totalMonitoredPlaces.toString()} />
                 ) : (
                   <StatusPill
                     label="Logged events"
@@ -479,8 +547,11 @@ export default function Home() {
                   summaries={districtSummary}
                   priorityLocations={emergencyPriority}
                   highRiskLocations={highRiskLocations}
+                  liveSummary={liveSummary}
+                  liveDistricts={liveDistricts}
+                  liveContextError={liveContextError}
                   monitoring={monitoring}
-                  loading={loadingDashboard || loadingDecision}
+                  loading={loadingDashboard || loadingDecision || loadingLiveContext}
                   onNavigate={setActiveView}
                   onOpenLocation={handleOpenLocation}
                   onDistrictChange={setDistrict}
@@ -511,6 +582,7 @@ export default function Home() {
                   search={search}
                   locations={locations}
                   selectedLocation={selectedLocation}
+                  liveContext={selectedLiveContext}
                   predictions={servedScores}
                   loading={loadingLocations}
                   predictingRecordId={predictingRecordId}
@@ -519,6 +591,7 @@ export default function Home() {
                   onSearchChange={setSearch}
                   onSelectLocation={setSelectedRecordId}
                   onPredictLocation={handlePredictLocation}
+                  onCreateReport={() => setActiveView("reports")}
                   onSubmitFeedback={handleSubmitFeedback}
                 />
               ) : null}
@@ -536,6 +609,8 @@ export default function Home() {
                 <ActionReportsPanel
                   summaries={districtSummary}
                   priorityLocations={emergencyPriority}
+                  liveSummary={liveSummary}
+                  liveDistricts={liveDistricts}
                   onNavigate={setActiveView}
                   onOpenLocation={handleOpenLocation}
                   onDraftCopilot={handleDraftCopilot}
@@ -573,6 +648,7 @@ export default function Home() {
                   district={district}
                   districts={districts}
                   priorityLocations={emergencyPriority}
+                  liveDistricts={liveDistricts}
                   loading={loadingDecision}
                   onDistrictChange={setDistrict}
                   onOpenLocation={handleOpenLocation}

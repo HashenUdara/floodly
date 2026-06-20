@@ -4,9 +4,11 @@ from fastapi.testclient import TestClient
 
 from app.core.settings import settings
 from app.main import app
+from app.services.decision_intelligence_service import get_decision_intelligence_service
 from app.services.drift_monitoring_service import DriftMonitoringService, get_drift_monitoring_service
 from app.services.feedback_service import FeedbackService, get_feedback_service
 from app.services.location_service import MonitoredLocationProvider, get_location_service
+from app.services.live_context_service import LiveContextService, get_live_context_service
 from app.services.model_score_store import ModelScoreStore, get_model_score_store
 from app.services.prediction_log_service import PredictionLogService, get_prediction_log_service
 from app.services.geospatial_service import get_boundary_service
@@ -86,6 +88,54 @@ def temp_system_service(tmp_path):
     app.dependency_overrides.clear()
     if hasattr(app.state, "system_monitoring_service"):
         delattr(app.state, "system_monitoring_service")
+
+
+class FakeOpenMeteoClient:
+    def __init__(self, fail: bool = False):
+        self.fail = fail
+        self.calls: list[str] = []
+
+    def get_json(self, url, params):
+        self.calls.append(url)
+        if self.fail:
+            raise TimeoutError("provider timeout")
+        if "forecast" in url:
+            return {
+                "current": {"precipitation": 1.2, "rain": 1.2},
+                "hourly": {
+                    "precipitation": [2.0] * 24 + [1.0] * 144,
+                    "precipitation_probability": [80] * 168,
+                    "rain": [2.0] * 168,
+                },
+                "daily": {
+                    "precipitation_sum": [48, 30, 20, 10, 5, 5, 5],
+                    "precipitation_probability_max": [90, 80, 70, 50, 40, 30, 20],
+                },
+            }
+        if "elevation" in url:
+            return {"elevation": [14.0]}
+        if "flood" in url:
+            return {
+                "daily": {
+                    "river_discharge": [80, 120, 130],
+                    "river_discharge_max": [160, 180, 190],
+                }
+            }
+        return {}
+
+
+@pytest.fixture
+def temp_live_context_service(tmp_path):
+    service = LiveContextService(
+        provider=get_location_service(),
+        decision_service=get_decision_intelligence_service(),
+        cache_path=tmp_path / "live_context_cache.json",
+        ttl_seconds=1800,
+        api_client=FakeOpenMeteoClient(),
+    )
+    app.dependency_overrides[get_live_context_service] = lambda: service
+    yield service
+    app.dependency_overrides.clear()
 
 
 def test_health_reports_model_loaded():
@@ -332,6 +382,69 @@ def test_monitoring_system_records_successful_and_failed_requests(temp_system_se
     assert "GET /health" in routes
     assert "GET /not-a-route" in routes
     assert routes["GET /not-a-route"]["error_count"] == 1
+
+
+def test_live_context_location_returns_weather_pressure(temp_live_context_service):
+    response = client.get("/live-context/locations/F104559")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["record_id"] == "F104559"
+    assert body["district"] == "Kilinochchi"
+    assert body["live_context_status"] == "live"
+    assert body["source"] == "open-meteo"
+    assert body["next_24h_rain_mm"] == 48.0
+    assert body["next_7d_rain_mm"] == 123.0
+    assert body["rainfall_pressure"] in {"Watch", "High", "Severe"}
+    assert body["river_discharge_max_m3s"] == 190.0
+    assert body["elevation_m"] == 14.0
+
+
+def test_live_context_uses_cache(temp_live_context_service):
+    first = client.get("/live-context/locations/F104559")
+    second = client.get("/live-context/locations/F104559")
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert len(temp_live_context_service.api_client.calls) == 3
+
+
+def test_live_context_summary_returns_attention_area(temp_live_context_service):
+    response = client.get("/live-context/summary")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "live"
+    assert body["highest_attention_area"]["district"]
+    assert body["highest_attention_area"]["need_review_count"] >= 0
+    assert body["weather_pressure"]["rainfall_pressure"] in {
+        "Normal",
+        "Watch",
+        "High",
+        "Severe",
+        "Unavailable",
+    }
+
+
+def test_live_context_provider_timeout_returns_unavailable(tmp_path):
+    service = LiveContextService(
+        provider=get_location_service(),
+        decision_service=get_decision_intelligence_service(),
+        cache_path=tmp_path / "live_context_cache.json",
+        ttl_seconds=1800,
+        api_client=FakeOpenMeteoClient(fail=True),
+    )
+    app.dependency_overrides[get_live_context_service] = lambda: service
+    try:
+        response = client.get("/live-context/locations/F104559")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["live_context_status"] == "unavailable"
+    assert body["rainfall_pressure"] == "Unavailable"
+    assert body["warnings"]
 
 
 def test_monitoring_summary_counts_logged_predictions(temp_log_service):

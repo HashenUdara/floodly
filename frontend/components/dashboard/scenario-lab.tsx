@@ -165,6 +165,38 @@ export function ScenarioLab({
     selectRecord(match)
   }
 
+  function applyPreset(preset: "heavy-rain" | "access-delay" | "river-pressure" | "shelter-capacity") {
+    setOverrides((current) => {
+      if (preset === "heavy-rain") {
+        return {
+          ...current,
+          rainfall_7d_mm: Math.max(current.rainfall_7d_mm ?? 0, 180),
+          monthly_rainfall_mm: Math.max(current.monthly_rainfall_mm ?? 0, 420),
+        }
+      }
+      if (preset === "access-delay") {
+        return {
+          ...current,
+          nearest_evac_km: Math.max(current.nearest_evac_km ?? 0, 25),
+          infrastructure_score: Math.min(current.infrastructure_score ?? 45, 35),
+        }
+      }
+      if (preset === "river-pressure") {
+        return {
+          ...current,
+          distance_to_river_m: Math.min(current.distance_to_river_m ?? 800, 300),
+          rainfall_7d_mm: Math.max(current.rainfall_7d_mm ?? 0, 140),
+        }
+      }
+      return {
+        ...current,
+        population_density_per_km2: Math.max(current.population_density_per_km2 ?? 0, 1500),
+        nearest_evac_km: Math.max(current.nearest_evac_km ?? 0, 18),
+      }
+    })
+    setScenarioResult(null)
+  }
+
   async function handleSimulate() {
     if (!target) return
     setSimulating(true)
@@ -220,15 +252,15 @@ export function ScenarioLab({
       <Card>
         <CardHeader className="gap-3">
           <div>
-            <CardTitle>Scenario Lab</CardTitle>
+            <CardTitle>What-if Planning</CardTitle>
             <CardDescription>
-              Stress-test a monitored place or a validated point in Sri Lanka with editable flood assumptions.
+              Test likely response conditions before teams move, then export a handover report.
             </CardDescription>
           </div>
           <CardAction className="flex flex-wrap gap-2">
             <Badge variant="outline" className="gap-1.5">
               <SlidersHorizontal className="size-3" />
-              What-if simulation
+              Scenario planning
             </Badge>
             <Badge variant="outline" className="gap-1.5">
               <MapPin className="size-3" />
@@ -381,37 +413,57 @@ export function ScenarioLab({
 
               <Card>
                 <CardHeader>
-                  <CardTitle>Scenario assumptions</CardTitle>
-                  <CardDescription>Editable inputs for controlled what-if scoring.</CardDescription>
+                  <CardTitle>Scenario presets</CardTitle>
+                  <CardDescription>Choose a planning condition or open advanced assumptions.</CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-3">
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {FIELD_CONFIG.map((field) => (
-                      <div key={field.key} className="flex flex-col gap-1.5">
-                        <Label htmlFor={field.key}>{field.label}</Label>
-                        <div className="flex items-center gap-2">
-                          <Input
-                            id={field.key}
-                            type="number"
-                            step={field.step}
-                            value={overrides[field.key] ?? ""}
-                            onChange={(event) =>
-                              setOverrides((current) => ({
-                                ...current,
-                                [field.key]: Number(event.target.value),
-                              }))
-                            }
-                          />
-                          <span className="w-12 text-xs text-muted-foreground">{field.unit}</span>
-                        </div>
-                      </div>
-                    ))}
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <Button type="button" variant="outline" onClick={() => applyPreset("heavy-rain")}>
+                      Heavy rainfall next 24h
+                    </Button>
+                    <Button type="button" variant="outline" onClick={() => applyPreset("access-delay")}>
+                      Access route delayed
+                    </Button>
+                    <Button type="button" variant="outline" onClick={() => applyPreset("river-pressure")}>
+                      River level pressure
+                    </Button>
+                    <Button type="button" variant="outline" onClick={() => applyPreset("shelter-capacity")}>
+                      Shelter capacity concern
+                    </Button>
                   </div>
+
+                  <details className="rounded-lg border border-border p-3">
+                    <summary className="cursor-pointer text-sm text-muted-foreground">
+                      Advanced assumptions
+                    </summary>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      {FIELD_CONFIG.map((field) => (
+                        <div key={field.key} className="flex flex-col gap-1.5">
+                          <Label htmlFor={field.key}>{field.label}</Label>
+                          <div className="flex items-center gap-2">
+                            <Input
+                              id={field.key}
+                              type="number"
+                              step={field.step}
+                              value={overrides[field.key] ?? ""}
+                              onChange={(event) =>
+                                setOverrides((current) => ({
+                                  ...current,
+                                  [field.key]: Number(event.target.value),
+                                }))
+                              }
+                            />
+                            <span className="w-12 text-xs text-muted-foreground">{field.unit}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
 
                   <div className="flex flex-wrap gap-2">
                     <Button type="button" onClick={handleSimulate} disabled={!target || simulating}>
                       {simulating ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <SlidersHorizontal data-icon="inline-start" />}
-                      Run simulation
+                      Run scenario
                     </Button>
                     <Button
                       type="button"
@@ -433,7 +485,7 @@ export function ScenarioLab({
                       disabled={!scenarioResult || exporting}
                     >
                       {exporting ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <Download data-icon="inline-start" />}
-                      Export PDF
+                      Export action report
                     </Button>
                   </div>
                 </CardContent>
@@ -441,21 +493,21 @@ export function ScenarioLab({
 
               <Card>
                 <CardHeader>
-                  <CardTitle>Scenario result</CardTitle>
-                  <CardDescription>Score, drivers, and action from the current assumptions.</CardDescription>
+                  <CardTitle>Planning result</CardTitle>
+                  <CardDescription>Risk change, action change, and handover path.</CardDescription>
                 </CardHeader>
                 <CardContent>
                   {scenarioResult ? (
                     <div className="flex flex-col gap-4">
                       <div className="grid gap-3 sm:grid-cols-3">
-                        <Metric label="Baseline" value={scenarioResult.baseline_risk_score.toFixed(4)} level={scenarioResult.baseline_risk_level} />
-                        <Metric label="Scenario" value={scenarioResult.scenario_risk_score.toFixed(4)} level={scenarioResult.scenario_risk_level} />
-                        <Metric label="Delta" value={formatDelta(scenarioResult.score_delta)} />
+                        <Metric label="Baseline risk" value={scenarioResult.baseline_risk_score.toFixed(4)} level={scenarioResult.baseline_risk_level} />
+                        <Metric label="Scenario risk" value={scenarioResult.scenario_risk_score.toFixed(4)} level={scenarioResult.scenario_risk_level} />
+                        <Metric label="Risk change" value={formatDelta(scenarioResult.score_delta)} />
                       </div>
                       <div className="flex flex-col gap-2 rounded-lg border border-border p-3 text-sm">
-                        <InfoLine label="Risk level delta" value={scenarioResult.risk_level_delta} />
+                        <InfoLine label="Action change" value={scenarioResult.risk_level_delta} />
+                        <InfoLine label="Who should review" value="district response desk" />
                         <InfoLine label="Priority" value={scenarioResult.operational_priority} />
-                        <InfoLine label="Model" value={scenarioResult.model_version} />
                       </div>
                       <DriverChips drivers={scenarioResult.risk_drivers} />
                       <div className="rounded-lg border border-border p-3 text-sm leading-6 text-muted-foreground">

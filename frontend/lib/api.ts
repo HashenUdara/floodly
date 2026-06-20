@@ -265,6 +265,81 @@ export type ScenarioResult = {
   scenario_record: Record<string, unknown>
 }
 
+export type LivePressure = "Normal" | "Watch" | "High" | "Severe" | "Unavailable"
+export type LiveContextStatus = "live" | "partial" | "unavailable"
+
+export type LocationLiveContext = {
+  live_context_status: LiveContextStatus
+  source: string
+  source_timestamp: string | null
+  latitude: number
+  longitude: number
+  record_id?: string
+  district?: string
+  place_name?: string
+  baseline_risk_level?: "Low" | "Medium" | "High"
+  operational_priority?: "Routine" | "Watch" | "Elevated" | "Critical"
+  recommended_action?: string
+  rain_now_mm: number | null
+  precipitation_now_mm: number | null
+  next_24h_rain_mm: number | null
+  next_7d_rain_mm: number | null
+  precipitation_probability_max: number | null
+  rainfall_pressure: LivePressure
+  river_discharge_m3s: number | null
+  river_discharge_max_m3s: number | null
+  river_pressure: LivePressure
+  elevation_m: number | null
+  warnings: string[]
+}
+
+export type LiveDistrictContext = {
+  district: string
+  monitored_places: number
+  need_review_count: number
+  high_risk_count: number
+  top_reason: string
+  live_context_status: LiveContextStatus
+  rainfall_pressure: LivePressure
+  river_pressure: LivePressure
+  next_24h_rain_mm: number | null
+  next_7d_rain_mm: number | null
+  river_discharge_max_m3s: number | null
+  source_timestamp: string | null
+}
+
+export type LiveContextSummary = {
+  status: LiveContextStatus
+  source: string
+  generated_at: string
+  cache_ttl_seconds: number
+  rainfall_outlook: string
+  highest_attention_area: LiveDistrictContext | null
+  weather_pressure: {
+    rainfall_pressure: LivePressure
+    river_pressure: LivePressure
+    next_24h_rain_mm: number | null
+    next_7d_rain_mm: number | null
+  }
+  exposed_districts: LiveDistrictContext[]
+  warnings: string[]
+}
+
+export type LiveDistrictContextResponse = {
+  status: LiveContextStatus
+  source: string
+  generated_at: string
+  districts: LiveDistrictContext[]
+}
+
+export type LiveContextRefreshResponse = {
+  status: LiveContextStatus
+  source: string
+  requested: number
+  refreshed: number
+  generated_at: string
+}
+
 export type ApiHealth = {
   status: string
   service: string
@@ -311,6 +386,34 @@ export function getDriftSummary() {
 
 export function getSystemMonitoringSummary() {
   return request<SystemMonitoringSummary>("/monitoring/system")
+}
+
+export function getLiveContextSummary() {
+  return request<LiveContextSummary>("/live-context/summary")
+}
+
+export function getLiveDistrictContext(params?: { district?: string }) {
+  const query = new URLSearchParams()
+  if (params?.district) query.set("district", params.district)
+  const suffix = query.toString() ? `?${query.toString()}` : ""
+  return request<LiveDistrictContextResponse>(`/live-context/districts${suffix}`)
+}
+
+export function getLiveLocationContext(recordId: string) {
+  return request<LocationLiveContext>(
+    `/live-context/locations/${encodeURIComponent(recordId)}`
+  )
+}
+
+export function refreshLiveContext(params?: { district?: string; limit?: number }) {
+  const query = new URLSearchParams()
+  if (params?.district) query.set("district", params.district)
+  if (params?.limit) query.set("limit", String(params.limit))
+  const suffix = query.toString() ? `?${query.toString()}` : ""
+  return request<LiveContextRefreshResponse>(`/live-context/refresh${suffix}`, {
+    method: "POST",
+    body: "{}",
+  })
 }
 
 export function getFeedbackSummary() {

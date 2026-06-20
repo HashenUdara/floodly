@@ -75,9 +75,9 @@ export function ResponseDocuments({
     <div className="grid gap-4 xl:grid-cols-[0.8fr_1.2fr]">
       <Card>
         <CardHeader>
-          <CardTitle>Response Documents</CardTitle>
+          <CardTitle>Guidance Library</CardTitle>
           <CardDescription>
-            SOPs, policies, and field reports used as response evidence.
+            SOPs, policies, and field reports used in action briefs.
           </CardDescription>
           <CardAction>
             <Button type="button" variant="outline" size="sm" onClick={onManageDocuments}>
@@ -93,48 +93,48 @@ export function ResponseDocuments({
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
               <DocumentMetric
-                label="Ready documents"
+                label="Ready guidance"
                 value={summary?.ready ?? 0}
                 detail="available for briefing"
                 loading={loading}
               />
               <DocumentMetric
-                label="Total documents"
+                label="All guidance"
                 value={summary?.total ?? 0}
                 detail="uploaded evidence"
                 loading={loading}
               />
               <DocumentMetric
-                label="In review"
+                label="Needs review"
                 value={summary?.indexing ?? 0}
-                detail="being prepared"
+                detail="being prepared for use"
                 loading={loading}
               />
               <DocumentMetric
-                label="Latest update"
+                label="Used in latest brief"
                 value={summary?.latest_indexed_at ? "available" : 0}
-                detail={summary?.latest_indexed_at ?? "no document indexed yet"}
+                detail={summary?.latest_indexed_at ?? "no guidance used yet"}
                 loading={loading}
               />
             </div>
           )}
           <div className="mt-4 rounded-lg border border-border p-3 text-sm text-muted-foreground">
-            Uploads and technical indexing controls are kept in Model Ops. This view
-            is for opening documents and asking Copilot for plain-language guidance.
+            Technical document operations stay in Model Ops. This view is for
+            opening guidance and asking Copilot how it applies to a place or district.
           </div>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Available evidence</CardTitle>
+          <CardTitle>Available guidance</CardTitle>
           <CardDescription>Open a document or ask Copilot to apply it.</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Document</TableHead>
+                <TableHead>Guidance</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>District</TableHead>
                 <TableHead>Status</TableHead>
@@ -195,7 +195,7 @@ export function ResponseDocuments({
               ) : (
                 <TableRow>
                   <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
-                    No response documents uploaded yet.
+                    No guidance documents uploaded yet.
                   </TableCell>
                 </TableRow>
               )}

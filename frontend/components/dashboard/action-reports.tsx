@@ -1,7 +1,12 @@
 import type { ReactNode } from "react"
 import { Bot, FileText, MapPinned, SlidersHorizontal } from "lucide-react"
 
-import { DistrictSummary, EmergencyPriorityLocation } from "@/lib/api"
+import {
+  DistrictSummary,
+  EmergencyPriorityLocation,
+  LiveContextSummary,
+  LiveDistrictContext,
+} from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -16,18 +21,23 @@ import { CompactDriverList } from "@/components/dashboard/shared"
 export function ActionReportsPanel({
   summaries,
   priorityLocations,
+  liveSummary,
+  liveDistricts,
   onNavigate,
   onOpenLocation,
   onDraftCopilot,
 }: {
   summaries: DistrictSummary[]
   priorityLocations: EmergencyPriorityLocation[]
+  liveSummary: LiveContextSummary | null
+  liveDistricts: LiveDistrictContext[]
   onNavigate: (view: ActiveView) => void
   onOpenLocation: (recordId: string, district?: string) => void
   onDraftCopilot: (prompt: string) => void
 }) {
   const topDistrict = summaries[0]
   const topPlace = priorityLocations[0]
+  const topLiveDistrict = liveSummary?.highest_attention_area ?? liveDistricts[0]
 
   return (
     <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
@@ -35,7 +45,7 @@ export function ActionReportsPanel({
         <CardHeader>
           <CardTitle>Action Reports</CardTitle>
           <CardDescription>
-            Create handover-ready risk briefs from places, scenarios, or districts.
+            Choose the handover format for a place, district, or scenario.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3">
@@ -44,10 +54,10 @@ export function ActionReportsPanel({
             title="Location action brief"
             detail={
               topPlace
-                ? `Start with ${topPlace.place_name}, ${topPlace.district}`
-                : "Choose a place from the Risk Map"
+                ? `Contains risk, reason, live weather, owner, and recommended action for ${topPlace.place_name}.`
+                : "Contains risk, reason, live weather, owner, and recommended action."
             }
-            action="Open place"
+            action="Create"
             onClick={() =>
               topPlace
                 ? onOpenLocation(topPlace.record_id, topPlace.district)
@@ -56,22 +66,22 @@ export function ActionReportsPanel({
           />
           <ReportAction
             icon={<SlidersHorizontal />}
-            title="Scenario PDF"
-            detail="Test changed assumptions and export a PDF action report."
-            action="Open Scenario Lab"
+            title="Scenario handover report"
+            detail="Contains baseline versus scenario risk, changed assumptions, and action change."
+            action="Simulate"
             onClick={() => onNavigate("scenario")}
           />
           <ReportAction
             icon={<Bot />}
             title="District action brief"
             detail={
-              topDistrict
-                ? `Generate a plain-language brief for ${topDistrict.district}`
-                : "Ask Copilot to prepare a district brief"
+              topLiveDistrict
+                ? `Contains live rainfall context and priority queue for ${topLiveDistrict.district}.`
+                : "Contains live rainfall context and priority queue for the highest attention area."
             }
-            action="Ask Copilot"
+            action="Draft"
             onClick={() => {
-              const district = topDistrict?.district ?? "the highest-risk district"
+              const district = topLiveDistrict?.district ?? topDistrict?.district ?? "the highest-risk district"
               onDraftCopilot(
                 `Create a concise action brief for ${district}. Include priority places, main risk reasons, recommended actions, and evidence sources.`
               )
@@ -84,7 +94,7 @@ export function ActionReportsPanel({
         <CardHeader>
           <CardTitle>Report starting point</CardTitle>
           <CardDescription>
-            Use the highest-priority place as the first handover item.
+            First report to create for the current morning briefing.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -122,13 +132,13 @@ export function ActionReportsPanel({
                   variant="outline"
                   onClick={() => onNavigate("scenario")}
                 >
-                  <FileText /> Build PDF
+                  <FileText /> Build scenario PDF
                 </Button>
               </div>
             </div>
           ) : (
             <div className="rounded-lg border border-dashed border-border p-5 text-sm text-muted-foreground">
-              No priority place is available yet. Open Risk Map or Scenario Lab to start a report.
+              No reports created yet. Open Risk Map or Scenario Lab to create the first report.
             </div>
           )}
         </CardContent>

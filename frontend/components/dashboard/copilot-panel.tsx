@@ -50,11 +50,23 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 
-const SUGGESTIONS = [
-  "Which places need attention first?",
-  "Why is F104559 risky?",
-  "Create an action brief for Colombo.",
-  "What does the response document recommend?",
+const TASK_PROMPTS = [
+  {
+    label: "Prioritize today",
+    prompt: "Which places need attention first today? Use live weather context, priority reasons, and recommended actions.",
+  },
+  {
+    label: "Explain this place",
+    prompt: "Why is F104559 risky, what should the district response desk do, and what evidence supports that?",
+  },
+  {
+    label: "Draft a report",
+    prompt: "Create a concise district morning brief for Colombo with priority places, reasons, actions, and evidence sources.",
+  },
+  {
+    label: "Use response guidance",
+    prompt: "What does the uploaded response guidance recommend, and how should it be applied to the highest-priority place?",
+  },
 ]
 
 export function CopilotPanel({
@@ -100,8 +112,8 @@ export function CopilotPanel({
             Intelligent Copilot
           </CardTitle>
           <CardDescription>
-            Ask about risk, priorities, recommended actions, and response
-            documents in plain language.
+            Choose a task or ask in plain language. Answers should connect live
+            context, priority reasons, guidance, and report-ready actions.
           </CardDescription>
           <CardAction>
             <Button type="button" variant="outline" size="sm" onClick={onOpenKnowledge}>
@@ -144,11 +156,12 @@ export function CopilotPanel({
 
             <div className="mt-3 space-y-3">
               <Suggestions>
-                {SUGGESTIONS.map((suggestion) => (
+                {TASK_PROMPTS.map((item) => (
                   <Suggestion
-                    key={suggestion}
-                    suggestion={suggestion}
-                    onClick={submitText}
+                    key={item.label}
+                    suggestion={item.label}
+                    aria-label={item.prompt}
+                    onClick={() => submitText(item.prompt)}
                     disabled={status !== "ready"}
                   />
                 ))}

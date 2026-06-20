@@ -2,6 +2,7 @@ import { useMemo } from "react"
 import type { FeatureCollection, Point } from "geojson"
 import {
   Filter,
+  FileText,
   Layers3,
   Loader2,
   LocateFixed,
@@ -11,7 +12,7 @@ import {
   Table2,
 } from "lucide-react"
 
-import { FeedbackRating, LocationRow, ObservedOutcome } from "@/lib/api"
+import { FeedbackRating, LocationLiveContext, LocationRow, ObservedOutcome } from "@/lib/api"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -73,6 +74,7 @@ export function RiskExplorer({
   search,
   locations,
   selectedLocation,
+  liveContext,
   predictions,
   loading,
   predictingRecordId,
@@ -82,12 +84,14 @@ export function RiskExplorer({
   onSelectLocation,
   onPredictLocation,
   onSubmitFeedback,
+  onCreateReport,
 }: {
   districts: string[]
   district: string
   search: string
   locations: LocationRow[]
   selectedLocation: LocationRow | null
+  liveContext: LocationLiveContext | null
   predictions: Record<string, ServedScore>
   loading: boolean
   predictingRecordId: string | null
@@ -96,6 +100,7 @@ export function RiskExplorer({
   onSearchChange: (search: string) => void
   onSelectLocation: (recordId: string) => void
   onPredictLocation: (recordId: string) => void
+  onCreateReport: () => void
   onSubmitFeedback: (payload: {
     recordId: string
     modelVersion: string
@@ -208,12 +213,14 @@ export function RiskExplorer({
               />
               <LocationInspector
                 location={selectedLocation}
+                liveContext={liveContext}
                 prediction={selectedPrediction}
                 predicting={predictingRecordId === selectedLocation?.record_id}
                 feedbackSubmitting={
                   feedbackSubmittingRecordId === selectedLocation?.record_id
                 }
                 onPredictLocation={onPredictLocation}
+                onCreateReport={onCreateReport}
                 onSubmitFeedback={onSubmitFeedback}
               />
             </div>
@@ -351,16 +358,20 @@ function SriLankaRiskMap({
 function LocationInspector({
   location,
   prediction,
+  liveContext,
   predicting,
   feedbackSubmitting,
   onPredictLocation,
+  onCreateReport,
   onSubmitFeedback,
 }: {
   location: LocationRow | null
   prediction: ServedScore | null
+  liveContext: LocationLiveContext | null
   predicting: boolean
   feedbackSubmitting: boolean
   onPredictLocation: (recordId: string) => void
+  onCreateReport: () => void
   onSubmitFeedback: (payload: {
     recordId: string
     modelVersion: string
@@ -371,7 +382,7 @@ function LocationInspector({
   if (!location) {
     return (
       <div className="rounded-lg border border-dashed border-border p-5 text-sm text-muted-foreground">
-        Select a map point or table row to inspect a location.
+        Select a map point or table row to open a place brief.
       </div>
     )
   }
@@ -380,9 +391,10 @@ function LocationInspector({
     <div className="rounded-lg border border-border p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="font-medium">{location.place_name}</div>
-          <div className="mt-1 font-mono text-xs text-muted-foreground">
-            {location.record_id} / {location.asset_type}
+          <div className="text-xs text-muted-foreground">Place Brief</div>
+          <div className="mt-1 font-medium">{location.place_name}</div>
+          <div className="mt-1 text-xs text-muted-foreground">
+            {location.district} / owner: district response desk
           </div>
         </div>
         <RiskBadge level={prediction?.risk_level ?? location.baseline_risk_level} />
@@ -391,13 +403,14 @@ function LocationInspector({
       <Separator className="my-4" />
 
       <div className="mb-4 rounded-lg border border-border p-3">
+        <div className="mb-2 text-xs text-muted-foreground">Today&apos;s risk</div>
         <div className="flex items-center justify-between gap-3">
-          <span className="text-xs text-muted-foreground">Operational priority</span>
+          <span className="text-sm">Priority</span>
           <Badge variant="outline">{location.operational_priority}</Badge>
         </div>
         <div className="mt-2 flex items-end justify-between gap-3">
           <div>
-            <div className="font-mono text-3xl font-semibold">
+            <div className="text-3xl font-semibold">
               {(prediction?.flood_risk_score ?? location.baseline_risk_score).toFixed(4)}
             </div>
             <div className="text-xs text-muted-foreground">
@@ -410,38 +423,9 @@ function LocationInspector({
         </div>
       </div>
 
-      <div className="grid gap-2 text-sm">
-        <InfoLine label="District" value={location.district} />
-        <InfoLine
-          label="Map coordinates"
-          value={`${location.map_latitude.toFixed(4)}, ${location.map_longitude.toFixed(4)}`}
-        />
-        <InfoLine
-          label="Raw data coordinates"
-          value={`${location.raw_latitude.toFixed(4)}, ${location.raw_longitude.toFixed(4)}`}
-        />
-        <InfoLine
-          label="Coordinate source"
-          value={location.coordinate_source.replaceAll("_", " ")}
-        />
-        <InfoLine label="Rainfall 7d" value={formatUnit(location.rainfall_7d_mm, "mm")} />
-        <InfoLine label="Elevation" value={formatUnit(location.elevation_m, "m")} />
-        <InfoLine
-          label="River distance"
-          value={formatUnit(location.distance_to_river_m, "m")}
-        />
-        <InfoLine label="Evacuation" value={formatUnit(location.nearest_evac_km, "km")} />
-        <InfoLine
-          label="Population density"
-          value={formatUnit(location.population_density_per_km2, "/km2")}
-        />
-      </div>
-
-      <Separator className="my-4" />
-
       <div className="mb-4 space-y-3">
         <div>
-          <div className="mb-2 text-xs text-muted-foreground">Risk drivers</div>
+          <div className="mb-2 text-xs text-muted-foreground">Why it matters</div>
           <div className="flex flex-wrap gap-2">
             {location.risk_drivers.length ? (
               location.risk_drivers.map((driver) => (
@@ -458,20 +442,63 @@ function LocationInspector({
           <div className="mb-1 text-xs text-muted-foreground">Recommended action</div>
           <p>{location.recommended_action}</p>
         </div>
+        <div className="rounded-lg border border-border p-3 text-sm">
+          <div className="mb-2 text-xs text-muted-foreground">Live weather context</div>
+          {liveContext ? (
+            <div className="grid gap-2">
+              <InfoLine label="Rain pressure" value={liveContext.rainfall_pressure} />
+              <InfoLine label="Rain next 24h" value={formatLiveRain(liveContext.next_24h_rain_mm)} />
+              <InfoLine label="Rain next 7d" value={formatLiveRain(liveContext.next_7d_rain_mm)} />
+              <InfoLine label="River signal" value={liveContext.river_pressure} />
+            </div>
+          ) : (
+            <p className="text-muted-foreground">
+              Live data unavailable. Use baseline risk until context refreshes.
+            </p>
+          )}
+        </div>
       </div>
 
-      <Button
-        type="button"
-        className="w-full"
-        onClick={() => onPredictLocation(location.record_id)}
-        disabled={predicting}
-      >
-        {predicting ? <Loader2 className="animate-spin" /> : <Play />}
-        Refresh risk
-      </Button>
+      <div className="grid gap-2">
+        <Button type="button" onClick={onCreateReport}>
+          <FileText data-icon="inline-start" />
+          Create report
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => onPredictLocation(location.record_id)}
+          disabled={predicting}
+        >
+          {predicting ? <Loader2 className="animate-spin" /> : <Play />}
+          Update assessment
+        </Button>
+      </div>
+
+      <details className="mt-4 rounded-lg border border-border p-3 text-sm">
+        <summary className="cursor-pointer text-muted-foreground">Evidence</summary>
+        <div className="mt-3 grid gap-2">
+          <InfoLine label="Record" value={location.record_id} />
+          <InfoLine
+            label="Map coordinates"
+            value={`${location.map_latitude.toFixed(4)}, ${location.map_longitude.toFixed(4)}`}
+          />
+          <InfoLine
+            label="Raw coordinates"
+            value={`${location.raw_latitude.toFixed(4)}, ${location.raw_longitude.toFixed(4)}`}
+          />
+          <InfoLine label="Source" value={location.data_provider.replaceAll("_", " ")} />
+          <InfoLine label="Rainfall 7d" value={formatUnit(location.rainfall_7d_mm, "mm")} />
+          <InfoLine label="Elevation" value={formatUnit(location.elevation_m, "m")} />
+          <InfoLine label="River distance" value={formatUnit(location.distance_to_river_m, "m")} />
+          <InfoLine label="Evacuation" value={formatUnit(location.nearest_evac_km, "km")} />
+          <InfoLine label="Population density" value={formatUnit(location.population_density_per_km2, "/km2")} />
+        </div>
+      </details>
 
       {prediction?.record_id ? (
         <div className="mt-3">
+          <div className="mb-2 text-xs text-muted-foreground">Review outcome</div>
           <FeedbackControls
             recordId={prediction.record_id}
             modelVersion={prediction.model_version}
@@ -593,7 +620,7 @@ function RiskTable({
                           }}
                         >
                           {predicting ? <Loader2 className="animate-spin" /> : <Play />}
-                          Refresh
+                          Update
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -612,6 +639,10 @@ function RiskTable({
       </CardContent>
     </Card>
   )
+}
+
+function formatLiveRain(value: number | null) {
+  return value == null ? "Unavailable" : `${value.toFixed(1)} mm`
 }
 
 function BusinessRiskStack({
