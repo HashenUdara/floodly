@@ -1,0 +1,29 @@
+{
+  "accepted": true,
+  "gates": {
+    "mae_gate": true,
+    "rmse_gate": true,
+    "prediction_range_gate": true
+  },
+  "champion": {
+    "model_version": "flood-risk-v3",
+    "oof_mae": 0.176789,
+    "oof_rmse": 0.231534
+  },
+  "challenger": {
+    "model_version": "flood-risk-challenger",
+    "oof_mae": 0.176901,
+    "oof_rmse": 0.23192,
+    "test_min": 0.0,
+    "test_max": 1.0
+  },
+  "tolerances": {
+    "mae": 0.002,
+    "rmse": 0.003
+  },
+  "promotion_policy": {
+    "failed_gate_behavior": "reject challenger and keep current release artifact",
+    "promotion_behavior": "human-approved release artifact replaces the current champion bundle",
+    "rollback_behavior": "restore the previous GitHub Release artifact bundle and restart the backend"
+  }
+}

@@ -18,8 +18,11 @@ results before submission.
 - `GET /monitoring/system` exposes request volume, errors, latency, route
   breakdown, document indexing failures, and retrieval activity.
 - Model Operations dashboard includes system reliability cards.
-- `scripts/load_smoke.py` can record throughput, latency, and failure rate for
-  the key service routes.
+- `scripts/load_smoke.py` records generated timestamp, throughput, latency,
+  failure rate, and per-route status breakdown for the key service routes.
+- `scripts/collect_ops_evidence.py` collects health, readiness, system
+  monitoring, load-smoke, document-search, and scaling notes into
+  `docs/evidence/`.
 
 ## Final Deployment URLs
 
@@ -72,11 +75,29 @@ Run after backend is live and artifacts are available:
 ml/.venv/bin/python scripts/load_smoke.py \
   --base-url http://127.0.0.1:8000 \
   --requests 5 \
-  --output docs/load_smoke_latest.json
+  --output docs/evidence/load_smoke_latest.json
 ```
 
 Use `--skip-documents-search` if the Knowledge Library database is not
 configured for the environment being tested.
+
+## Production Evidence Command
+
+Run after backend is live and artifacts are available:
+
+```bash
+ml/.venv/bin/python scripts/collect_ops_evidence.py \
+  --base-url http://127.0.0.1:8000 \
+  --requests 5
+```
+
+Expected outputs:
+
+```text
+docs/evidence/readiness_latest.json
+docs/evidence/load_smoke_latest.json
+docs/evidence/production_ops_summary.md
+```
 
 ## Latest Load Result
 
@@ -121,5 +142,7 @@ Promotion policy:
 - Run artifact smoke after uploading `floodlens-artifacts.zip` to GitHub
   Releases.
 - Run load-smoke against the deployed backend and paste the result here.
+- Run `scripts/collect_ops_evidence.py` against the deployed backend and keep
+  the generated files under `docs/evidence/`.
 - Add final frontend and backend URLs.
 - Verify Neon/Dokploy migration from a clean database.

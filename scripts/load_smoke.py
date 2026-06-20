@@ -7,6 +7,7 @@ import statistics
 import time
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -61,6 +62,26 @@ def first_record(path: Path) -> dict[str, Any]:
     return parsed
 
 
+def summarize_routes(measurements: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for item in measurements:
+        grouped.setdefault(str(item["route"]), []).append(item)
+    summary = {}
+    for route, items in grouped.items():
+        latencies = [float(item["latency_ms"]) for item in items]
+        success = sum(1 for item in items if item["ok"])
+        summary[route] = {
+            "requests": len(items),
+            "success_count": success,
+            "failure_count": len(items) - success,
+            "failure_rate": round((len(items) - success) / len(items), 4) if items else None,
+            "p50_latency_ms": round(float(statistics.median(latencies)), 2) if latencies else None,
+            "p95_latency_ms": percentile(latencies, 95),
+            "statuses": sorted({item["status"] for item in items}, key=lambda value: str(value)),
+        }
+    return summary
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run FloodLens API load smoke checks.")
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
@@ -112,14 +133,19 @@ def main() -> None:
     latencies = [item["latency_ms"] for item in measurements]
     success_count = sum(1 for item in measurements if item["ok"])
     result = {
+        "generated_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
         "base_url": base_url,
         "total_requests": len(measurements),
         "success_count": success_count,
         "failure_count": len(measurements) - success_count,
+        "failure_rate": round((len(measurements) - success_count) / len(measurements), 4)
+        if measurements
+        else None,
         "throughput_rps": round(len(measurements) / elapsed, 2) if elapsed else None,
         "p50_latency_ms": round(float(statistics.median(latencies)), 2) if latencies else None,
         "p95_latency_ms": percentile(latencies, 95),
         "max_latency_ms": round(max(latencies), 2) if latencies else None,
+        "route_summary": summarize_routes(measurements),
         "routes": measurements,
     }
     payload = json.dumps(result, indent=2)

@@ -347,7 +347,15 @@ Load-smoke evidence:
 ml/.venv/bin/python scripts/load_smoke.py \
   --base-url http://127.0.0.1:8000 \
   --requests 5 \
-  --output docs/load_smoke_latest.json
+  --output docs/evidence/load_smoke_latest.json
+```
+
+Collect production evidence:
+
+```bash
+ml/.venv/bin/python scripts/collect_ops_evidence.py \
+  --base-url http://127.0.0.1:8000 \
+  --requests 5
 ```
 
 Upload a document:
@@ -372,7 +380,10 @@ curl -X POST http://127.0.0.1:8000/documents/search \
 Evaluate retrieval after the fixture is ready:
 
 ```bash
-ml/.venv/bin/python scripts/evaluate_retrieval.py
+ml/.venv/bin/python scripts/evaluate_retrieval.py \
+  --upload-fixtures \
+  --output docs/evidence/rag_evaluation_latest.json \
+  --summary-output docs/evidence/rag_evaluation_summary.md
 ```
 
 Use `--upload-fixtures` to upload and index the fixture automatically.
