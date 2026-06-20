@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import type { Feature, Polygon } from "geojson"
 import { Download, Loader2, MapPin, RotateCcw, Search, SlidersHorizontal } from "lucide-react"
 
@@ -85,16 +85,110 @@ const FIELD_CONFIG: Array<{
   key: keyof ScenarioOverrides
   label: string
   unit: string
-  step: string
+  step: number
+  min: number
+  max: number
+  normal: number
+  lowLabel: string
+  highLabel: string
+  help: string
 }> = [
-  { key: "rainfall_7d_mm", label: "7-day rainfall", unit: "mm", step: "1" },
-  { key: "monthly_rainfall_mm", label: "Monthly rainfall", unit: "mm", step: "1" },
-  { key: "elevation_m", label: "Elevation", unit: "m", step: "1" },
-  { key: "distance_to_river_m", label: "River distance", unit: "m", step: "10" },
-  { key: "nearest_evac_km", label: "Evacuation distance", unit: "km", step: "0.1" },
-  { key: "population_density_per_km2", label: "Population density", unit: "/km2", step: "1" },
-  { key: "historical_flood_count", label: "Historical floods", unit: "count", step: "1" },
-  { key: "infrastructure_score", label: "Infrastructure score", unit: "/100", step: "1" },
+  {
+    key: "rainfall_7d_mm",
+    label: "Rain expected this week",
+    unit: "mm",
+    step: 5,
+    min: 0,
+    max: 300,
+    normal: 50,
+    lowLabel: "light",
+    highLabel: "extreme",
+    help: "Use this when planners expect heavier rainfall than usual.",
+  },
+  {
+    key: "monthly_rainfall_mm",
+    label: "Wet month pressure",
+    unit: "mm",
+    step: 10,
+    min: 0,
+    max: 800,
+    normal: 150,
+    lowLabel: "dry",
+    highLabel: "very wet",
+    help: "Represents accumulated pressure before the next event.",
+  },
+  {
+    key: "elevation_m",
+    label: "Ground height",
+    unit: "m",
+    step: 5,
+    min: 0,
+    max: 2500,
+    normal: 60,
+    lowLabel: "low",
+    highLabel: "high",
+    help: "Lower places usually need earlier attention.",
+  },
+  {
+    key: "distance_to_river_m",
+    label: "Distance from river",
+    unit: "m",
+    step: 100,
+    min: 0,
+    max: 10000,
+    normal: 2500,
+    lowLabel: "near",
+    highLabel: "far",
+    help: "Closer locations can face faster river or drainage impact.",
+  },
+  {
+    key: "nearest_evac_km",
+    label: "Access to safe point",
+    unit: "km",
+    step: 0.5,
+    min: 0,
+    max: 50,
+    normal: 5,
+    lowLabel: "near",
+    highLabel: "far",
+    help: "Longer access distance raises operational priority.",
+  },
+  {
+    key: "population_density_per_km2",
+    label: "People exposed nearby",
+    unit: "/km2",
+    step: 50,
+    min: 0,
+    max: 5000,
+    normal: 600,
+    lowLabel: "low",
+    highLabel: "dense",
+    help: "Higher exposure can change who needs to review the plan.",
+  },
+  {
+    key: "historical_flood_count",
+    label: "Known past flood events",
+    unit: "count",
+    step: 1,
+    min: 0,
+    max: 20,
+    normal: 1,
+    lowLabel: "rare",
+    highLabel: "repeated",
+    help: "Use local memory or field records when available.",
+  },
+  {
+    key: "infrastructure_score",
+    label: "Drainage and road condition",
+    unit: "/100",
+    step: 5,
+    min: 0,
+    max: 100,
+    normal: 60,
+    lowLabel: "weak",
+    highLabel: "strong",
+    help: "Lower scores mean weaker drainage, access, or protection.",
+  },
 ]
 
 type ScenarioTarget =
@@ -115,7 +209,9 @@ export function ScenarioLab({
   const [target, setTarget] = useState<ScenarioTarget | null>(
     selectedLocation ? { type: "record", location: selectedLocation } : null
   )
-  const [recordSearch, setRecordSearch] = useState(selectedLocation?.record_id ?? "")
+  const [targetSearch, setTargetSearch] = useState(
+    selectedLocation ? `${selectedLocation.place_name}, ${selectedLocation.district}` : ""
+  )
   const [overrides, setOverrides] = useState<ScenarioOverrides>({})
   const [scenarioResult, setScenarioResult] = useState<ScenarioResult | null>(null)
   const [loadingContext, setLoadingContext] = useState(false)
@@ -130,10 +226,14 @@ export function ScenarioLab({
       : target?.type === "custom"
         ? contextToLocation(target.context)
         : null
+  const targetMatches = useMemo(
+    () => findLocationMatches(locations, targetSearch),
+    [locations, targetSearch]
+  )
 
   function selectRecord(location: LocationRow) {
     setTarget({ type: "record", location })
-    setRecordSearch(location.record_id)
+    setTargetSearch(`${location.place_name}, ${location.district}`)
     setOverrides(overridesFromLocation(location))
     setScenarioResult(null)
     setMessage(null)
@@ -146,7 +246,7 @@ export function ScenarioLab({
     try {
       const context = await getScenarioContext({ latitude, longitude })
       setTarget({ type: "custom", context })
-      setRecordSearch("")
+      setTargetSearch(`${context.place_name}, ${context.district}`)
       setOverrides(context.context)
       setScenarioResult(null)
     } catch (err: unknown) {
@@ -156,10 +256,10 @@ export function ScenarioLab({
     }
   }
 
-  function handleSearchRecord() {
-    const match = locations.find((location) => location.record_id === recordSearch.trim())
+  function handleSearchTarget() {
+    const match = targetMatches[0]
     if (!match) {
-      setMessage("Record is not in the current visible location set. Use Risk Map filters to load it first.")
+      setMessage("No visible monitored place matched that area. Try a district, town, place name, or click the map.")
       return
     }
     selectRecord(match)
@@ -310,7 +410,7 @@ export function ScenarioLab({
                         />
                       </MarkerContent>
                       <MarkerTooltip>
-                        {location.place_name} / {location.record_id}
+                        {location.place_name}, {location.district}
                       </MarkerTooltip>
                     </MapMarker>
                   ))}
@@ -355,7 +455,7 @@ export function ScenarioLab({
                           >
                             <TableCell>
                               <div className="font-medium">{location.place_name}</div>
-                              <div className="font-mono text-xs text-muted-foreground">{location.record_id}</div>
+                              <div className="text-xs text-muted-foreground">{location.operational_priority} priority</div>
                             </TableCell>
                             <TableCell>{location.district}</TableCell>
                             <TableCell>{formatUnit(location.rainfall_7d_mm, "mm")}</TableCell>
@@ -374,21 +474,49 @@ export function ScenarioLab({
             <div className="flex flex-col gap-4">
               <Card>
                 <CardHeader>
-                  <CardTitle>Assessment target</CardTitle>
-                  <CardDescription>Use a visible record or click inside Sri Lanka.</CardDescription>
+                  <CardTitle>Choose place or area</CardTitle>
+                  <CardDescription>Search by place or district, select from the list, or click inside Sri Lanka.</CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-4">
                   <div className="flex gap-2">
                     <Input
-                      value={recordSearch}
-                      onChange={(event) => setRecordSearch(event.target.value)}
-                      placeholder="Record ID"
+                      value={targetSearch}
+                      onChange={(event) => setTargetSearch(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") handleSearchTarget()
+                      }}
+                      placeholder="Search place or district, e.g. Colombo"
                     />
-                    <Button type="button" variant="outline" onClick={handleSearchRecord}>
+                    <Button type="button" variant="outline" onClick={handleSearchTarget}>
                       <Search data-icon="inline-start" />
-                      Load
+                      Find
                     </Button>
                   </div>
+                  {targetSearch.trim() ? (
+                    <div className="rounded-lg border border-border p-2">
+                      <div className="mb-2 text-xs text-muted-foreground">
+                        {targetMatches.length
+                          ? `${targetMatches.length} visible match${targetMatches.length === 1 ? "" : "es"}`
+                          : "No visible matches yet"}
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        {targetMatches.slice(0, 4).map((location) => (
+                          <button
+                            key={location.record_id}
+                            type="button"
+                            className="flex items-center justify-between rounded-md px-2 py-2 text-left text-sm hover:bg-muted"
+                            onClick={() => selectRecord(location)}
+                          >
+                            <span>
+                              <span className="font-medium">{location.place_name}</span>
+                              <span className="text-muted-foreground">, {location.district}</span>
+                            </span>
+                            <RiskBadge level={location.baseline_risk_level} label={location.operational_priority} />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
 
                   {activeLocation ? (
                     <div className="flex flex-col gap-2 rounded-lg border border-border p-3 text-sm">
@@ -398,10 +526,7 @@ export function ScenarioLab({
                         label="Coordinates"
                         value={`${activeLocation.latitude.toFixed(4)}, ${activeLocation.longitude.toFixed(4)}`}
                       />
-                      <InfoLine
-                        label="Source"
-                        value={target?.type === "custom" ? target.context.context_source : activeLocation.data_provider}
-                      />
+                      <InfoLine label="Planning target" value={target?.type === "custom" ? "Custom map point" : activeLocation.asset_type} />
                     </div>
                   ) : (
                     <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
@@ -436,26 +561,19 @@ export function ScenarioLab({
                     <summary className="cursor-pointer text-sm text-muted-foreground">
                       Advanced assumptions
                     </summary>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <div className="mt-3 flex flex-col gap-3">
                       {FIELD_CONFIG.map((field) => (
-                        <div key={field.key} className="flex flex-col gap-1.5">
-                          <Label htmlFor={field.key}>{field.label}</Label>
-                          <div className="flex items-center gap-2">
-                            <Input
-                              id={field.key}
-                              type="number"
-                              step={field.step}
-                              value={overrides[field.key] ?? ""}
-                              onChange={(event) =>
-                                setOverrides((current) => ({
-                                  ...current,
-                                  [field.key]: Number(event.target.value),
-                                }))
-                              }
-                            />
-                            <span className="w-12 text-xs text-muted-foreground">{field.unit}</span>
-                          </div>
-                        </div>
+                        <AssumptionControl
+                          key={field.key}
+                          field={field}
+                          value={overrides[field.key]}
+                          onChange={(value) =>
+                            setOverrides((current) => ({
+                              ...current,
+                              [field.key]: value,
+                            }))
+                          }
+                        />
                       ))}
                     </div>
                   </details>
@@ -612,6 +730,74 @@ function Metric({
   )
 }
 
+function AssumptionControl({
+  field,
+  value,
+  onChange,
+}: {
+  field: (typeof FIELD_CONFIG)[number]
+  value: number | undefined
+  onChange: (value: number) => void
+}) {
+  const safeValue = clampNumber(value ?? field.normal, field.min, field.max)
+  const percentage =
+    field.max === field.min ? 0 : ((safeValue - field.min) / (field.max - field.min)) * 100
+
+  return (
+    <div className="rounded-lg border border-border p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <Label htmlFor={field.key}>{field.label}</Label>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">{field.help}</p>
+        </div>
+        <div className="min-w-24 text-right">
+          <div className="font-mono text-sm font-semibold">
+            {formatAssumptionValue(safeValue, field.unit)}
+          </div>
+          <div className="text-xs text-muted-foreground">current assumption</div>
+        </div>
+      </div>
+      <div className="mt-3 flex items-center gap-3">
+        <span className="w-14 text-xs text-muted-foreground">{field.lowLabel}</span>
+        <input
+          id={field.key}
+          type="range"
+          min={field.min}
+          max={field.max}
+          step={field.step}
+          value={safeValue}
+          onChange={(event) => onChange(Number(event.target.value))}
+          className="h-2 flex-1 cursor-pointer appearance-none rounded-full bg-muted accent-primary"
+          style={{
+            background: `linear-gradient(to right, hsl(var(--primary)) ${percentage}%, hsl(var(--muted)) ${percentage}%)`,
+          }}
+        />
+        <span className="w-16 text-right text-xs text-muted-foreground">{field.highLabel}</span>
+      </div>
+      <div className="mt-3 flex items-center justify-between gap-3">
+        <Button type="button" variant="outline" size="sm" onClick={() => onChange(field.normal)}>
+          Use normal
+        </Button>
+        <div className="flex items-center gap-2">
+          <Input
+            type="number"
+            min={field.min}
+            max={field.max}
+            step={field.step}
+            value={Number.isFinite(safeValue) ? safeValue : ""}
+            onChange={(event) =>
+              onChange(clampNumber(Number(event.target.value), field.min, field.max))
+            }
+            className="w-28"
+            aria-label={`${field.label} exact value`}
+          />
+          <span className="w-12 text-xs text-muted-foreground">{field.unit}</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function overridesFromLocation(location: LocationRow): ScenarioOverrides {
   return {
     rainfall_7d_mm: location.rainfall_7d_mm ?? 0,
@@ -623,6 +809,39 @@ function overridesFromLocation(location: LocationRow): ScenarioOverrides {
     historical_flood_count: location.historical_flood_count ?? 0,
     infrastructure_score: location.infrastructure_score ?? 0,
   }
+}
+
+function findLocationMatches(locations: LocationRow[], query: string) {
+  const normalized = query.trim().toLowerCase()
+  if (!normalized) return []
+  return locations
+    .filter((location) => {
+      const haystack = [
+        location.place_name,
+        location.district,
+        location.asset_type,
+        location.record_id,
+      ]
+        .join(" ")
+        .toLowerCase()
+      return haystack.includes(normalized)
+    })
+    .sort((a, b) => {
+      const aExactDistrict = a.district.toLowerCase() === normalized ? 1 : 0
+      const bExactDistrict = b.district.toLowerCase() === normalized ? 1 : 0
+      if (aExactDistrict !== bExactDistrict) return bExactDistrict - aExactDistrict
+      return b.baseline_risk_score - a.baseline_risk_score
+    })
+}
+
+function clampNumber(value: number, min: number, max: number) {
+  if (!Number.isFinite(value)) return min
+  return Math.min(max, Math.max(min, value))
+}
+
+function formatAssumptionValue(value: number, unit: string) {
+  const display = Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1)
+  return `${display}${unit.startsWith("/") ? unit : ` ${unit}`}`
 }
 
 function contextToLocation(context: ScenarioContext): LocationRow {
